@@ -1,4 +1,4 @@
-# SOLE / SELECT Flutter 목업
+# ShuPick Flutter 목업
 
 Higgsfield 목업의 화면 구조와 로컬에서 확인 가능한 상호작용을 Flutter로 옮긴 팀 작업본입니다.
 
