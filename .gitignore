@@ -390,3 +390,23 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/windows,macos,flutter,dart,python,firebase,visualstudiocode,android
+
+# Additional local Flutter ignore rules
+*.class
+*.pyc
+*.swp
+.atom/
+.build/
+.buildlog/
+.svn/
+.swiftpm/
+migrate_working_dir/
+*.ipr
+*.iws
+/build/
+/coverage/
+app.*.symbols
+app.*.map.json
+/android/app/debug
+/android/app/profile
+/android/app/release
