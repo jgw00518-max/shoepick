@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'localization.dart';
 
 import '../app/store_controller.dart';
+import '../app/store_navigation_controller.dart';
 import '../data/mock_repositories.dart';
 import '../data/local_settings_repository.dart';
 import '../domain/models.dart';
@@ -38,16 +40,16 @@ enum StorePage {
 
 /// 목업의 탭과 뒤로 가기 흐름을 한곳에서 관리합니다.
 class StoreShell extends StatefulWidget {
-  const StoreShell({super.key, required this.store});
-  final StoreController store;
+  const StoreShell({super.key});
   @override
   State<StoreShell> createState() => _StoreShellState();
 }
 
 class _StoreShellState extends State<StoreShell> {
+  final StoreController store = Get.find<StoreController>();
+  final StoreNavigationController navigation =
+      Get.find<StoreNavigationController>();
   final settings = LocalSettingsRepository();
-  StorePage page = StorePage.home;
-  final List<StorePage> history = [];
   Product? selected;
   String campaign = '이번 주 특가';
   String? catalogGender;
@@ -96,16 +98,13 @@ class _StoreShellState extends State<StoreShell> {
     }
   }
 
-  void go(StorePage next) {
-    if (page != next) history.add(page);
-    setState(() => page = next);
-  }
+  void go(StorePage next) => navigation.go(next);
 
-  void back() => setState(
-    () => page = history.isEmpty ? StorePage.home : history.removeLast(),
-  );
+  void back() => navigation.back();
+
+  StorePage get page => navigation.page;
   void openProduct(Product product) {
-    widget.store.view(product);
+    store.view(product);
     selected = product;
     go(StorePage.detail);
   }
@@ -152,107 +151,109 @@ class _StoreShellState extends State<StoreShell> {
   };
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: widget.store,
-    builder: (context, _) => LocaleScope(
-      language: language,
-      child: Theme(
-        data: dark ? ThemeData.dark(useMaterial3: true) : Theme.of(context),
-        child: Scaffold(
-          appBar: page == StorePage.auth
-              ? null
-              : AppBar(
-                  leading: page == StorePage.home
-                      ? Builder(
-                          builder: (context) => IconButton(
-                            tooltip: '카테고리',
-                            icon: const Icon(Icons.menu),
-                            onPressed: () => Scaffold.of(context).openDrawer(),
+  Widget build(BuildContext context) => GetBuilder<StoreNavigationController>(
+    builder: (_) => GetBuilder<StoreController>(
+      builder: (_) => LocaleScope(
+        language: language,
+        child: Theme(
+          data: dark ? ThemeData.dark(useMaterial3: true) : Theme.of(context),
+          child: Scaffold(
+            appBar: page == StorePage.auth
+                ? null
+                : AppBar(
+                    leading: page == StorePage.home
+                        ? Builder(
+                            builder: (context) => IconButton(
+                              tooltip: '카테고리',
+                              icon: const Icon(Icons.menu),
+                              onPressed: () =>
+                                  Scaffold.of(context).openDrawer(),
+                            ),
+                          )
+                        : IconButton(
+                            tooltip: '뒤로 가기',
+                            icon: const Icon(Icons.arrow_back),
+                            onPressed: back,
                           ),
-                        )
-                      : IconButton(
-                          tooltip: '뒤로 가기',
-                          icon: const Icon(Icons.arrow_back),
-                          onPressed: back,
-                        ),
-                  title: LText(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  actions: [
-                    IconButton(
-                      tooltip: '검색',
-                      icon: const Icon(Icons.search),
-                      onPressed: () => go(StorePage.search),
-                    ),
-                    Badge(
-                      isLabelVisible: widget.store.cartCount > 0,
-                      label: LText('${widget.store.cartCount}'),
-                      child: IconButton(
-                        tooltip: '장바구니',
-                        icon: const Icon(Icons.shopping_bag_outlined),
-                        onPressed: () => go(StorePage.cart),
+                    title: LText(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                  ],
-                ),
-          drawer: page == StorePage.auth ? null : _drawer(),
-          body: widget.store.loading
-              ? const Center(child: CircularProgressIndicator())
-              : widget.store.loadError != null
-              ? EmptyState(
-                  widget.store.loadError!,
-                  action: '다시 시도',
-                  onAction: widget.store.load,
-                )
-              : _body(),
-          bottomNavigationBar: page == StorePage.auth
-              ? null
-              : NavigationBar(
-                  height: 64,
-                  selectedIndex: switch (page) {
-                    StorePage.recent => 1,
-                    StorePage.wish => 2,
-                    StorePage.profile ||
-                    StorePage.orders ||
-                    StorePage.shipping ||
-                    StorePage.coupons ||
-                    StorePage.points ||
-                    StorePage.inquiry ||
-                    StorePage.settings => 3,
-                    _ => 0,
-                  },
-                  onDestinationSelected: (index) => go(
-                    [
-                      StorePage.home,
-                      StorePage.recent,
-                      StorePage.wish,
-                      StorePage.profile,
-                    ][index],
+                    actions: [
+                      IconButton(
+                        tooltip: '검색',
+                        icon: const Icon(Icons.search),
+                        onPressed: () => go(StorePage.search),
+                      ),
+                      Badge(
+                        isLabelVisible: store.cartCount > 0,
+                        label: LText('${store.cartCount}'),
+                        child: IconButton(
+                          tooltip: '장바구니',
+                          icon: const Icon(Icons.shopping_bag_outlined),
+                          onPressed: () => go(StorePage.cart),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                   ),
-                  destinations: const [
-                    NavigationDestination(
-                      icon: Icon(Icons.home_outlined),
-                      label: '홈',
+            drawer: page == StorePage.auth ? null : _drawer(),
+            body: store.loading
+                ? const Center(child: CircularProgressIndicator())
+                : store.loadError != null
+                ? EmptyState(
+                    store.loadError!,
+                    action: '다시 시도',
+                    onAction: store.load,
+                  )
+                : _body(),
+            bottomNavigationBar: page == StorePage.auth
+                ? null
+                : NavigationBar(
+                    height: 64,
+                    selectedIndex: switch (page) {
+                      StorePage.recent => 1,
+                      StorePage.wish => 2,
+                      StorePage.profile ||
+                      StorePage.orders ||
+                      StorePage.shipping ||
+                      StorePage.coupons ||
+                      StorePage.points ||
+                      StorePage.inquiry ||
+                      StorePage.settings => 3,
+                      _ => 0,
+                    },
+                    onDestinationSelected: (index) => go(
+                      [
+                        StorePage.home,
+                        StorePage.recent,
+                        StorePage.wish,
+                        StorePage.profile,
+                      ][index],
                     ),
-                    NavigationDestination(
-                      icon: Icon(Icons.history),
-                      label: '최근 본 상품',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.favorite_border),
-                      label: '찜목록',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.person_outline),
-                      label: '마이',
-                    ),
-                  ],
-                ),
+                    destinations: const [
+                      NavigationDestination(
+                        icon: Icon(Icons.home_outlined),
+                        label: '홈',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.history),
+                        label: '최근 본 상품',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.favorite_border),
+                        label: '찜목록',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.person_outline),
+                        label: '마이',
+                      ),
+                    ],
+                  ),
+          ),
         ),
       ),
     ),
@@ -260,7 +261,7 @@ class _StoreShellState extends State<StoreShell> {
 
   Widget _body() => switch (page) {
     StorePage.home => HomeScreen(
-      store: widget.store,
+      store: store,
       onOpen: openProduct,
       onCampaign: (name) {
         campaign = name;
@@ -269,22 +270,22 @@ class _StoreShellState extends State<StoreShell> {
     ),
     StorePage.catalog => CatalogScreen(
       key: ValueKey('$catalogGender-$catalogMiddle-$catalogSubcategory'),
-      store: widget.store,
+      store: store,
       onOpen: openProduct,
       initialGender: catalogGender,
       initialMiddle: catalogMiddle,
       initialSubcategory: catalogSubcategory,
     ),
-    StorePage.search => SearchScreen(store: widget.store, onOpen: openProduct),
+    StorePage.search => SearchScreen(store: store, onOpen: openProduct),
     StorePage.campaign => CampaignScreen(
       title: campaign,
-      store: widget.store,
+      store: store,
       onOpen: openProduct,
     ),
     StorePage.detail => ProductDetailScreen(
       key: ValueKey(selected!.id),
       product: selected!,
-      store: widget.store,
+      store: store,
       onCart: () => go(StorePage.cart),
       onBuy: startCheckout,
       onOpenProduct: openProduct,
@@ -296,25 +297,25 @@ class _StoreShellState extends State<StoreShell> {
     ),
     StorePage.wish => ProductCollectionScreen(
       title: '찜한 상품',
-      products: widget.store.wished,
-      store: widget.store,
+      products: store.wished,
+      store: store,
       onOpen: openProduct,
       canRemove: true,
     ),
     StorePage.recent => ProductCollectionScreen(
       title: '최근 본 상품',
-      products: widget.store.recent,
-      store: widget.store,
+      products: store.recent,
+      store: store,
       onOpen: openProduct,
     ),
     StorePage.cart => CartScreen(
-      store: widget.store,
+      store: store,
       onOpen: openProduct,
       onCheckout: (lines) => startCheckout(lines, fromCart: true),
       onMessage: message,
     ),
     StorePage.checkout => CheckoutScreen(
-      store: widget.store,
+      store: store,
       lines: checkoutLines,
       fromCart: checkoutFromCart,
       onComplete: () {
@@ -322,25 +323,24 @@ class _StoreShellState extends State<StoreShell> {
       },
     ),
     StorePage.profile => ProfileScreen(
-      store: widget.store,
+      store: store,
       onGo: (next) {
         if (next == StorePage.inquiry) inquiryProduct = null;
         go(next);
       },
       onLogout: () {
-        widget.store.signOut();
-        history.clear();
-        setState(() => page = StorePage.profile);
+        store.signOut();
+        navigation.resetTo(StorePage.profile);
       },
     ),
     StorePage.auth => AuthScreen(
-      store: widget.store,
+      store: store,
       onBack: back,
       onDone: () => go(StorePage.profile),
       onMessage: message,
     ),
     StorePage.orders => OrdersScreen(
-      store: widget.store,
+      store: store,
       onMessage: message,
       onShipping: (order) {
         selectedOrderNumber = order.number;
@@ -348,8 +348,8 @@ class _StoreShellState extends State<StoreShell> {
       },
     ),
     StorePage.shipping => ShippingScreen(
-      store: widget.store,
-      order: widget.store.orders
+      store: store,
+      order: store.orders
           .where((o) => o.number == selectedOrderNumber)
           .firstOrNull,
       onOrders: () => go(StorePage.orders),
@@ -357,7 +357,7 @@ class _StoreShellState extends State<StoreShell> {
     StorePage.coupons => const CouponsScreen(),
     StorePage.points => const PointsScreen(),
     StorePage.inquiry => InquiryScreen(
-      store: widget.store,
+      store: store,
       product: inquiryProduct,
       onMessage: message,
     ),

@@ -1,11 +1,12 @@
-import 'package:flutter/foundation.dart';
 import 'dart:async';
+
+import 'package:get/get.dart';
 
 import '../domain/models.dart';
 import '../domain/repositories.dart';
 
 /// 화면 상태를 관리하며 저장과 조회는 Repository에 위임합니다.
-class StoreController extends ChangeNotifier {
+class StoreController extends GetxController {
   StoreController({
     required this.productsRepository,
     required this.accountRepository,
@@ -33,6 +34,12 @@ class StoreController extends ChangeNotifier {
   String? loadError;
   bool isLoggedIn = false;
 
+  @override
+  void onInit() {
+    super.onInit();
+    load();
+  }
+
   int get cartCount => cart.fold(0, (sum, item) => sum + item.quantity);
   int get cartTotal => cart.fold(0, (sum, item) => sum + item.total);
   List<Product> get wished =>
@@ -46,7 +53,7 @@ class StoreController extends ChangeNotifier {
   Future<void> load() async {
     loading = true;
     loadError = null;
-    notifyListeners();
+    update();
     try {
       products = await productsRepository.getProducts();
       orders = List.of(await orderRepository.getOrders());
@@ -73,20 +80,20 @@ class StoreController extends ChangeNotifier {
       loadError = '상품을 불러오지 못했습니다.';
     } finally {
       loading = false;
-      notifyListeners();
+      update();
     }
   }
 
   void view(Product product) {
     recentIds.remove(product.id);
     recentIds.insert(0, product.id);
-    notifyListeners();
+    update();
     unawaited(_saveShopping());
   }
 
   void toggleWish(Product product) {
     if (!wishedIds.remove(product.id)) wishedIds.add(product.id);
-    notifyListeners();
+    update();
     unawaited(_saveShopping());
   }
 
@@ -105,7 +112,7 @@ class StoreController extends ChangeNotifier {
         );
       }
     }
-    notifyListeners();
+    update();
     unawaited(_saveShopping());
   }
 
@@ -113,7 +120,7 @@ class StoreController extends ChangeNotifier {
     final index = cart.indexWhere((entry) => entry.key == item.key);
     if (index < 0) return;
     cart[index] = cart[index].copyWith(quantity: quantity.clamp(1, 99));
-    notifyListeners();
+    update();
     unawaited(_saveShopping());
   }
 
@@ -133,13 +140,13 @@ class StoreController extends ChangeNotifier {
     } else {
       cart.add(updated);
     }
-    notifyListeners();
+    update();
     unawaited(_saveShopping());
   }
 
   void removeCartKeys(Set<String> keys) {
     cart.removeWhere((item) => keys.contains(item.key));
-    notifyListeners();
+    update();
     unawaited(_saveShopping());
   }
 
@@ -157,7 +164,7 @@ class StoreController extends ChangeNotifier {
     final success = await accountRepository.signIn(email, password);
     if (success) {
       isLoggedIn = true;
-      notifyListeners();
+      update();
     }
     return success;
   }
@@ -167,7 +174,7 @@ class StoreController extends ChangeNotifier {
 
   void signOut() {
     isLoggedIn = false;
-    notifyListeners();
+    update();
   }
 
   Future<StoreOrder> placeOrder(
@@ -192,7 +199,7 @@ class StoreController extends ChangeNotifier {
       final selectedKeys = selected.map((item) => item.key).toSet();
       cart.removeWhere((item) => selectedKeys.contains(item.key));
     }
-    notifyListeners();
+    update();
     unawaited(_saveShopping());
     return order;
   }
@@ -201,7 +208,7 @@ class StoreController extends ChangeNotifier {
     final canceled = await orderRepository.cancelOrder(order);
     final index = orders.indexWhere((item) => item.number == order.number);
     if (index >= 0) orders[index] = canceled;
-    notifyListeners();
+    update();
   }
 
   /// 구매 항목별 중복 리뷰를 막는 목업 상태입니다.
@@ -215,7 +222,7 @@ class StoreController extends ChangeNotifier {
     }
     await reviewRepository.addReview(review);
     reviews.add(review);
-    notifyListeners();
+    update();
   }
 
   Future<void> updateReview(ProductReview review) async {
@@ -226,7 +233,7 @@ class StoreController extends ChangeNotifier {
           item.itemKey == review.itemKey,
     );
     if (index >= 0) reviews[index] = review;
-    notifyListeners();
+    update();
   }
 
   Future<void> deleteReview(ProductReview review) async {
@@ -236,19 +243,19 @@ class StoreController extends ChangeNotifier {
           item.orderNumber == review.orderNumber &&
           item.itemKey == review.itemKey,
     );
-    notifyListeners();
+    update();
   }
 
   Future<void> addInquiry(String kind, String title, String body) async {
     final entry = await supportRepository.createInquiry(kind, title, body);
     inquiries.insert(0, entry);
-    notifyListeners();
+    update();
   }
 
   Future<void> toggleRestock(String key) async {
     if (!restockKeys.remove(key)) restockKeys.add(key);
     await supportRepository.saveRestockKeys(Set.of(restockKeys));
-    notifyListeners();
+    update();
   }
 
   bool hasReview(StoreOrder order, CartItem item) => reviews.any(

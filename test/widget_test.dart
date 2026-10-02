@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
 import 'package:shupick/app/shupick_app.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  tearDown(Get.reset);
+
   testWidgets('비회원 홈에서 상품과 마이페이지로 이동할 수 있다', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const ShupickApp());

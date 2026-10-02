@@ -1,9 +1,24 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shupick/app/store_navigation_controller.dart';
 import 'package:shupick/app/store_controller.dart';
 import 'package:shupick/data/mock_repositories.dart';
 import 'package:shupick/domain/models.dart';
+import 'package:shupick/presentation/store_shell.dart';
 
 void main() {
+  test('GetX 화면 이동 기록에 따라 이전 화면으로 돌아간다', () {
+    final navigation = StoreNavigationController();
+
+    navigation.go(StorePage.catalog);
+    navigation.go(StorePage.detail);
+    expect(navigation.page, StorePage.detail);
+
+    navigation.back();
+    expect(navigation.page, StorePage.catalog);
+    navigation.back();
+    expect(navigation.page, StorePage.home);
+  });
+
   test('목업 상품 조회와 장바구니 주문 흐름', () async {
     final store = StoreController(
       productsRepository: MockProductRepository(),
