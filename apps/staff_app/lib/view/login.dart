@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shupick_staff_mockup/model/staff_session.dart';
-import 'package:shupick_staff_mockup/view/staff_registration.dart';
+import 'package:shoepick_staff_app/model/staff_session.dart';
+import 'package:shoepick_staff_app/view/staff_registration.dart';
 
 class Login extends StatefulWidget {
   const Login({super.key, required this.onSignIn, this.initialError});

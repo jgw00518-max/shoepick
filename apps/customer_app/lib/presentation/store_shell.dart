@@ -17,6 +17,8 @@ import 'screens/product_detail_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/support_screens.dart';
 import 'shared/store_widgets.dart';
+import '../view/order_history_view.dart';
+import '../vm/firebase_account.dart';
 
 enum StorePage {
   home,
@@ -339,14 +341,17 @@ class _StoreShellState extends State<StoreShell> {
       onDone: () => go(StorePage.profile),
       onMessage: message,
     ),
-    StorePage.orders => OrdersScreen(
-      store: store,
-      onMessage: message,
-      onShipping: (order) {
-        selectedOrderNumber = order.number;
-        go(StorePage.shipping);
-      },
-    ),
+    StorePage.orders =>
+      store.accountRepository is FirebaseAccount
+          ? const OrderHistoryView()
+          : OrdersScreen(
+              store: store,
+              onMessage: message,
+              onShipping: (order) {
+                selectedOrderNumber = order.number;
+                go(StorePage.shipping);
+              },
+            ),
     StorePage.shipping => ShippingScreen(
       store: store,
       order: store.orders

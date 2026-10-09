@@ -1,10 +1,10 @@
-import 'package:shupick_staff_mockup/model/staff_analytics_data.dart';
-import 'package:shupick_staff_mockup/model/staff_order.dart';
-import 'package:shupick_staff_mockup/model/staff_overview.dart';
-import 'package:shupick_staff_mockup/model/staff_session.dart';
-import 'package:shupick_staff_mockup/model/staff_views.dart';
-import 'package:shupick_staff_mockup/vm/staff_order_api.dart';
-import 'package:shupick_staff_mockup/vm/staff_work_api.dart';
+import 'package:shoepick_staff_app/model/staff_analytics_data.dart';
+import 'package:shoepick_staff_app/model/staff_order.dart';
+import 'package:shoepick_staff_app/model/staff_overview.dart';
+import 'package:shoepick_staff_app/model/staff_session.dart';
+import 'package:shoepick_staff_app/model/staff_views.dart';
+import 'package:shoepick_staff_app/vm/staff_order_api.dart';
+import 'package:shoepick_staff_app/vm/staff_work_api.dart';
 
 int _count<T>(Iterable<T> values, bool Function(T) matches) =>
     values.where(matches).length;

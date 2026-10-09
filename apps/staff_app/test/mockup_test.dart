@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shupick_staff_mockup/main.dart';
-import 'package:shupick_staff_mockup/model/mock_store.dart';
-import 'package:shupick_staff_mockup/model/staff_role.dart';
-import 'package:shupick_staff_mockup/model/staff_views.dart';
-import 'package:shupick_staff_mockup/vm/staff_order_api.dart';
-import 'package:shupick_staff_mockup/vm/staff_registration_service.dart';
-import 'package:shupick_staff_mockup/vm/staff_session.dart';
-import 'package:shupick_staff_mockup/vm/staff_work_api.dart';
+import 'package:shoepick_staff_app/main.dart';
+import 'package:shoepick_staff_app/model/mock_store.dart';
+import 'package:shoepick_staff_app/model/staff_role.dart';
+import 'package:shoepick_staff_app/model/staff_views.dart';
+import 'package:shoepick_staff_app/vm/staff_order_api.dart';
+import 'package:shoepick_staff_app/vm/staff_registration_service.dart';
+import 'package:shoepick_staff_app/vm/staff_session.dart';
+import 'package:shoepick_staff_app/vm/staff_work_api.dart';
 
 void main() {
   setUp(() => MockStore.instance.reset());
@@ -60,11 +60,14 @@ void main() {
     await orders.completePickup(order, 'MOCK-1003');
     expect(
       (await orders.listOrders(
-        branchId: 1,
+        branchId: MockStore.gangnamBranchId,
       )).firstWhere((o) => o.id == 3).status,
       'COMPLETED',
     );
-    final eligible = await api.lookupReturnOrder(1, 'MOCK-1006');
+    final eligible = await api.lookupReturnOrder(
+      MockStore.gangnamBranchId,
+      'MOCK-1006',
+    );
     final id =
         (await api.registerReturn(6, {
               'reason': '가상 반품',

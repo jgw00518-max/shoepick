@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "587862108383",
+    "project_id": "shoepick-40a48",
+    "storage_bucket": "shoepick-40a48.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:587862108383:android:89a6c84307db33ed1e616a",
+        "android_client_info": {
+          "package_name": "com.example.shupick"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyApdxzCM4HtZ_Bt7HM1Gity8pNYRy2CHlw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:587862108383:android:6ff55cc0151347c41e616a",
+        "android_client_info": {
+          "package_name": "com.shoepick.mockup.shupick_staff_mockup"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyApdxzCM4HtZ_Bt7HM1Gity8pNYRy2CHlw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
