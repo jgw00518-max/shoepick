@@ -2,3 +2,4 @@ fastapi
 uvicorn
 PyMySQL
 python-dotenv
+firebase-admin

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 if __package__:
     from .features import (
+        authentication,
         dashboard,
         goods_receipts,
         inventory,
@@ -11,6 +12,7 @@ if __package__:
     )
 else:
     from features import (
+        authentication,
         dashboard,
         goods_receipts,
         inventory,
@@ -23,6 +25,7 @@ app = FastAPI(title="Shoe Store API")
 
 # 기능별 파일에서 정의한 API를 공통 경로에 등록한다.
 for feature in (
+    authentication,
     inventory,
     purchase_requisitions,
     purchase_approvals,

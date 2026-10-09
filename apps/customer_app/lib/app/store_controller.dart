@@ -172,9 +172,19 @@ class StoreController extends GetxController {
   Future<void> signUp(String email, String password) =>
       accountRepository.signUp(email, password);
 
-  void signOut() {
+  Future<void> signOut() async {
+    await accountRepository.signOut();
     isLoggedIn = false;
+    // 이전 사용자의 개인 상태가 다음 로그인 화면에 남지 않도록 비운다.
+    cart.clear();
+    orders.clear();
+    reviews.clear();
+    wishedIds.clear();
+    recentIds.clear();
+    inquiries.clear();
+    restockKeys.clear();
     update();
+    await _saveShopping();
   }
 
   Future<StoreOrder> placeOrder(
