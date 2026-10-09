@@ -1,4 +1,4 @@
-import 'package:shupick_staff_mockup/auth/staff_session.dart';
+import 'package:shupick_staff_mockup/model/staff_session.dart';
 
 /// SQL aggregate values may arrive as JSON numbers or decimal strings.
 Map<String, dynamic> normalizeStaffAnalytics(Map<String, dynamic> source) {

@@ -1,3 +1,8 @@
 {
-  "dart.projectSearchPaths": ["apps/customer_app", "apps/staff_app"]
+  "dart.projectSearchPaths": [
+    "apps/customer_app",
+    "apps/staff_app"
+  ],
+  "python-envs.defaultEnvManager": "ms-python.python:conda",
+  "python-envs.defaultPackageManager": "ms-python.python:conda"
 }

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shupick_staff_mockup/main.dart';
-import 'package:shupick_staff_mockup/dashboard/dashboard_page.dart';
-import 'package:shupick_staff_mockup/dashboard/staff_views.dart';
-import 'package:shupick_staff_mockup/dashboard/staff_order_api.dart';
-import 'package:shupick_staff_mockup/dashboard/staff_work_api.dart';
-import 'package:shupick_staff_mockup/auth/staff_session.dart';
-import 'package:shupick_staff_mockup/auth/staff_registration_service.dart';
-import 'package:shupick_staff_mockup/mock/mock_store.dart';
+import 'package:shupick_staff_mockup/model/mock_store.dart';
+import 'package:shupick_staff_mockup/model/staff_role.dart';
+import 'package:shupick_staff_mockup/model/staff_views.dart';
+import 'package:shupick_staff_mockup/vm/staff_order_api.dart';
+import 'package:shupick_staff_mockup/vm/staff_registration_service.dart';
+import 'package:shupick_staff_mockup/vm/staff_session.dart';
+import 'package:shupick_staff_mockup/vm/staff_work_api.dart';
 
 void main() {
   setUp(() => MockStore.instance.reset());

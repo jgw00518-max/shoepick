@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shupick_staff_mockup/auth/staff_session.dart';
-import 'package:shupick_staff_mockup/dashboard/staff_work_api.dart';
+import 'package:shupick_staff_mockup/model/staff_session.dart';
+import 'package:shupick_staff_mockup/vm/staff_work_api.dart';
 
 class ReturnRefundPanel extends StatefulWidget {
   const ReturnRefundPanel({

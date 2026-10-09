@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:shupick_staff_mockup/dashboard/staff_pages.dart';
-import 'package:shupick_staff_mockup/dashboard/staff_overview.dart';
-import 'package:shupick_staff_mockup/dashboard/staff_views.dart';
-import 'package:shupick_staff_mockup/dashboard/staff_order_api.dart';
-import 'package:shupick_staff_mockup/dashboard/staff_work_api.dart';
+import 'package:shupick_staff_mockup/model/staff_role.dart';
+import 'package:shupick_staff_mockup/model/staff_views.dart';
+import 'package:shupick_staff_mockup/view/staff_overview.dart';
+import 'package:shupick_staff_mockup/view/staff_pages.dart';
+import 'package:shupick_staff_mockup/vm/staff_order_api.dart';
+import 'package:shupick_staff_mockup/vm/staff_work_api.dart';
 
 const _navy = Color(0xFF19324F);
 const _blue = Color(0xFF2563C6);
@@ -11,30 +12,6 @@ const _ink = Color(0xFF1B2B40);
 const _muted = Color(0xFF66768B);
 const _line = Color(0xFFE2E8F0);
 const _canvas = Color(0xFFF5F7FA);
-
-enum StaffRole {
-  branchStaff('대리점 직원', '입고·픽업 결제 코드 확인·반품 현황', true),
-  branchManager('대리점장', '지점 재고와 입고·픽업 업무', true),
-  hqStaff('본사 사원', '주문·고객 문의·배송·구매 품의', false),
-  teamLeader('본사 팀장', '구매 품의 결재와 재고 조회', false),
-  director('본사 이사', '구매 품의 최종 결재', false),
-  executive('본사 임원', '판매·재고·발주 분석', false);
-
-  const StaffRole(this.label, this.description, this.isBranch);
-
-  static StaffRole? fromCode(String code) => switch (code) {
-    'BRANCH_STAFF' => StaffRole.branchStaff,
-    'BRANCH_MANAGER' => StaffRole.branchManager,
-    'HQ_STAFF' => StaffRole.hqStaff,
-    'TEAM_LEAD' => StaffRole.teamLeader,
-    'DIRECTOR' => StaffRole.director,
-    'EXECUTIVE' => StaffRole.executive,
-    _ => null,
-  };
-  final String label;
-  final String description;
-  final bool isBranch;
-}
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({

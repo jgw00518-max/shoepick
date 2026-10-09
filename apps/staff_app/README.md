@@ -45,10 +45,12 @@ Android 에뮬레이터 또는 Windows에서도 실행할 수 있습니다. `flu
 
 Firebase SDK·설정 파일·API 키·서비스 계정·HTTP 클라이언트·MySQL 연결·실제 사용자 데이터는 포함하지 않았습니다. 실행에 Firebase 설정과 백엔드 서버가 필요하지 않습니다. 런타임 앱 의존성은 Flutter SDK뿐입니다.
 
-- `lib/view/`, `lib/dashboard/`: 분리한 UI 및 화면 동작
-- `lib/mock/mock_store.dart`: 샘플 데이터 및 메모리 상태
-- `lib/auth/`: 가상 로그인·등록과 화면 모델
-- `lib/dashboard/staff_order_api.dart`, `staff_work_api.dart`: UI 인터페이스를 제공하는 로컬 시뮬레이션
+- `lib/main.dart`: 앱 실행 진입점
+- `lib/model/`: 직원·직책·주문·대시보드 데이터 구조, JSON 변환, 메뉴 정보, 샘플 데이터
+- `lib/view/`: 로그인·직원 등록·대시보드·업무 화면과 위젯
+- `lib/vm/`: 가상 로그인·등록·주문·업무 처리와 대시보드 조회·집계 로직
+
+직원 프로필과 주문 모델을 목업 처리 코드에서 분리하고, 대시보드의 조회·집계는 `StaffOverviewVm`으로 옮겼습니다. 기존 인터페이스 이름은 유지합니다. 현재 화면의 폼·로딩·선택 상태는 기존 StatefulWidget 방식이며, 전체 GetX 전환은 포함하지 않습니다.
 
 업무의 승인·환불·적립금·재고 수치는 화면 검토용이며 실제 업무 정책 검증이나 권한 제어를 제공하지 않습니다. 원본 앱의 업무 코드와 데이터는 변경하지 않습니다.
 

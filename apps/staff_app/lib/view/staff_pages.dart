@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:shupick_staff_mockup/dashboard/staff_views.dart';
-import 'package:shupick_staff_mockup/dashboard/staff_order_api.dart';
-import 'package:shupick_staff_mockup/dashboard/staff_work_api.dart';
-import 'package:shupick_staff_mockup/auth/staff_session.dart';
-import 'package:shupick_staff_mockup/dashboard/branch_return_registration.dart';
-import 'package:shupick_staff_mockup/dashboard/return_refund_panel.dart';
-import 'package:shupick_staff_mockup/dashboard/staff_analytics_data.dart';
+import 'package:shupick_staff_mockup/model/staff_analytics_data.dart';
+import 'package:shupick_staff_mockup/model/staff_order.dart';
+import 'package:shupick_staff_mockup/model/staff_session.dart';
+import 'package:shupick_staff_mockup/model/staff_views.dart';
+import 'package:shupick_staff_mockup/view/branch_return_registration.dart';
+import 'package:shupick_staff_mockup/view/return_refund_panel.dart';
+import 'package:shupick_staff_mockup/vm/staff_order_api.dart';
+import 'package:shupick_staff_mockup/vm/staff_work_api.dart';
 
 const _blue = Color(0xFF2563C6);
 const _ink = Color(0xFF1B2B40);

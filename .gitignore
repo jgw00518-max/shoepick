@@ -391,6 +391,9 @@ $RECYCLE.BIN/
 
 # End of https://www.toptal.com/developers/gitignore/api/windows,macos,flutter,dart,python,firebase,visualstudiocode,android
 
+# 백엔드 연결 정보는 로컬에만 보관하고 설정 예시만 공유한다.
+!backend/.env.example
+
 # Additional local Flutter ignore rules
 *.class
 *.pyc
