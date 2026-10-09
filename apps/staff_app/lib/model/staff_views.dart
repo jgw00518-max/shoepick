@@ -26,6 +26,7 @@ class StaffMenu {
 
 List<StaffMenu> menusForRole(String role) => switch (role) {
   'branchStaff' => const [
+    StaffMenu(StaffView.shipping, '출고 대상 조회', Icons.local_shipping_outlined),
     StaffMenu(StaffView.overview, '대시보드', Icons.dashboard_outlined),
     StaffMenu(StaffView.inbound, '입고', Icons.inventory_2_outlined),
     StaffMenu(StaffView.pickup, '픽업 코드 확인', Icons.pin_outlined),
@@ -33,6 +34,7 @@ List<StaffMenu> menusForRole(String role) => switch (role) {
     StaffMenu(StaffView.stockLookup, '현재 재고', Icons.warehouse_outlined),
   ],
   'branchManager' => const [
+    StaffMenu(StaffView.shipping, '출고 대상 조회', Icons.local_shipping_outlined),
     StaffMenu(StaffView.overview, '대시보드', Icons.dashboard_outlined),
     StaffMenu(StaffView.inventory, '날짜별 재고', Icons.warehouse_outlined),
     StaffMenu(StaffView.inbound, '입고', Icons.inventory_2_outlined),

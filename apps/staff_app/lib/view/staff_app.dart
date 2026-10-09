@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../vm/firebase_staff_auth.dart';
 import 'package:shupick_staff_mockup/model/staff_role.dart';
 import 'package:shupick_staff_mockup/model/staff_session.dart';
 import 'package:shupick_staff_mockup/view/dashboard_page.dart';
@@ -152,6 +153,9 @@ class _MyAppState extends State<MyApp> {
           ? Login(onSignIn: _signIn, initialError: initialError)
           : DashboardPage(
               key: ValueKey(staff.id),
+              dispatchRequest: authRepository is FirebaseStaffAuth
+                  ? (authRepository as FirebaseStaffAuth).api.getResponse
+                  : null,
               initialRole: allowedRoles.first,
               availableRoles: allowedRoles,
               employeeName: staff.name,

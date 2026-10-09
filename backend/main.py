@@ -6,6 +6,7 @@ if __package__:
         dashboard,
         goods_receipts,
         inventory,
+        order_history,
         manufacturer_orders,
         purchase_approvals,
         purchase_requisitions,
@@ -16,6 +17,7 @@ else:
         dashboard,
         goods_receipts,
         inventory,
+        order_history,
         manufacturer_orders,
         purchase_approvals,
         purchase_requisitions,
@@ -32,6 +34,7 @@ for feature in (
     manufacturer_orders,
     goods_receipts,
     dashboard,
+    order_history,
 ):
     app.include_router(feature.router, prefix="/api/v1")
 

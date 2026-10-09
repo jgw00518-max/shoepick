@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dispatch_view.dart';
 import 'package:shupick_staff_mockup/model/staff_role.dart';
 import 'package:shupick_staff_mockup/model/staff_views.dart';
 import 'package:shupick_staff_mockup/view/staff_overview.dart';
@@ -26,6 +27,7 @@ class DashboardPage extends StatefulWidget {
     required this.onSignOut,
     this.orderRepository,
     this.workApi,
+    this.dispatchRequest,
   });
 
   final StaffRole initialRole;
@@ -38,6 +40,7 @@ class DashboardPage extends StatefulWidget {
   final VoidCallback onSignOut;
   final StaffOrderRepository? orderRepository;
   final StaffWorkApi? workApi;
+  final Future<Map<String, dynamic>> Function(String)? dispatchRequest;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -137,6 +140,17 @@ class _DashboardPageState extends State<DashboardPage> {
                                       orderRepository: widget.orderRepository,
                                       workApi: widget.workApi,
                                       onOpenView: _selectView,
+                                    )
+                                  else if (selectedView == StaffView.shipping &&
+                                      widget.dispatchRequest != null)
+                                    DispatchView(
+                                      key: ValueKey(
+                                        '${role.name}-dispatch-${widget.selectedBranchId}',
+                                      ),
+                                      request: widget.dispatchRequest!,
+                                      branchId: role.isBranch
+                                          ? widget.selectedBranchId
+                                          : null,
                                     )
                                   else
                                     StaffPage(
