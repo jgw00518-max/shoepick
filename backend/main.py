@@ -8,6 +8,9 @@ if __package__:
         manufacturer_orders,
         purchase_approvals,
         purchase_requisitions,
+        products,
+        order,
+        branches
     )
 else:
     from features import (
@@ -17,6 +20,9 @@ else:
         manufacturer_orders,
         purchase_approvals,
         purchase_requisitions,
+        products,
+        order,
+        branches
     )
 
 app = FastAPI(title="Shoe Store API")
@@ -29,6 +35,9 @@ for feature in (
     manufacturer_orders,
     goods_receipts,
     dashboard,
+    products,
+    order,
+    branches
 ):
     app.include_router(feature.router, prefix="/api/v1")
 
