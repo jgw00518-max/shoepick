@@ -413,8 +413,3 @@ app.*.map.json
 
 # Google App Engine generated folder
 appengine-generated/
-
-# 공통 백엔드 설정 예시는 공유하고 실제 비밀 파일은 제외한다.
-!backend/.env.example
-backend/secrets/
-.pytest_cache/
