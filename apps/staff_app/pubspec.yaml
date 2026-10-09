@@ -1,4 +1,4 @@
-name: shupick_staff_mockup
+name: shoepick_staff_app
 description: "Standalone SHOEPICK staff UI mockup with in-memory sample data."
 publish_to: 'none'
 version: 0.1.0+1
@@ -12,6 +12,7 @@ dependencies:
   firebase_core: ^4.15.0
   flutter:
     sdk: flutter
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:

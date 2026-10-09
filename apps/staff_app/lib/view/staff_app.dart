@@ -117,7 +117,7 @@ class _MyAppState extends State<MyApp> {
                   vertical: 6,
                 ),
                 child: Text(
-                  'UI 목업 · 가상 데이터 · 실제 계정/업무에 반영되지 않습니다.',
+                  '본사·대리점 재고는 실제 조회 · 그 외 화면은 UI 목업입니다.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.primary,

@@ -36,7 +36,7 @@ List<StaffMenu> menusForRole(String role) => switch (role) {
   'branchManager' => const [
     StaffMenu(StaffView.shipping, '출고 대상 조회', Icons.local_shipping_outlined),
     StaffMenu(StaffView.overview, '대시보드', Icons.dashboard_outlined),
-    StaffMenu(StaffView.inventory, '날짜별 재고', Icons.warehouse_outlined),
+    StaffMenu(StaffView.inventory, '대리점 보관 현황', Icons.warehouse_outlined),
     StaffMenu(StaffView.inbound, '입고', Icons.inventory_2_outlined),
     StaffMenu(StaffView.pickup, '픽업 코드 확인', Icons.pin_outlined),
     StaffMenu(StaffView.returns, '반품', Icons.assignment_return_outlined),
@@ -77,7 +77,7 @@ String viewTitle(
   StaffView.inbound => '입고 관리',
   StaffView.pickup => '고객 상품 수령',
   StaffView.returns => isBranch ? '반품 접수·현황' : '반품 검수',
-  StaffView.inventory => isBranch ? '날짜별 재고 현황' : '제품별 재고 현황',
+  StaffView.inventory => isBranch ? '대리점 보관 현황' : '제품별 재고 현황',
   StaffView.stockLookup => '현재 재고 조회',
   StaffView.communication => '업무 소통',
   StaffView.orders => '고객 주문',
@@ -108,7 +108,7 @@ String viewDescription(
         ? '방문 고객의 반품을 접수하고 소속 지점의 처리 상태를 확인하세요.'
         : '반품 상품을 검수하고 승인 또는 반려하세요.',
   StaffView.inventory =>
-    isBranch ? '선택한 날짜의 지점 재고와 입출고 현황입니다.' : '목표 재고 대비 보유량을 확인하세요.',
+    isBranch ? '본사에서 받은 주문 상품의 보관 상태를 조회하세요.' : '본사의 실물·예약·불량·가용 재고를 조회하세요.',
   StaffView.stockLookup => '현장 처리에 필요한 현재 재고를 조회하세요.',
   StaffView.communication => '지점과 본사 담당자에게 업무를 전달하고 답변을 확인하세요.',
   StaffView.orders => '구매 신청과 희망 대리점을 확인하세요.',

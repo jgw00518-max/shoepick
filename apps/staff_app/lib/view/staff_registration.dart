@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shupick_staff_mockup/model/staff_session.dart';
-import 'package:shupick_staff_mockup/vm/staff_registration_service.dart';
+import 'package:shoepick_staff_app/model/staff_session.dart';
+import 'package:shoepick_staff_app/vm/staff_registration_service.dart';
 
 class StaffRegistrationPage extends StatefulWidget {
   const StaffRegistrationPage({super.key, this.repository});

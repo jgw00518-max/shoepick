@@ -1,28 +1,33 @@
 # SHOEPICK 직원 UI 목업
 
-직원용 Flutter 앱에서 UI를 분리한 독립 프로젝트입니다. 화면은 원본의 레이아웃을 사용하고, 업무 데이터와 동작은 메모리의 가상 데이터로 시뮬레이션합니다.
+직원용 Flutter 앱입니다. 본사·대리점 재고 화면은 FastAPI로 실제 MySQL 데이터를 조회하며, 나머지 화면은 메모리의 가상 데이터로 시뮬레이션합니다.
 
 ## 실행
 
-Flutter SDK가 설치된 환경에서 이 폴더를 열고 실행하세요.
+Flutter SDK와 Android SDK가 설치된 환경에서 Android 에뮬레이터를 켜고 실행하세요.
 
 ```powershell
 flutter pub get
-flutter run -d chrome
+flutter devices
+flutter run -d emulator-5554
 ```
 
-Android 에뮬레이터 또는 Windows에서도 실행할 수 있습니다. `flutter devices`로 기기 ID를 확인한 뒤 `flutter run -d 기기ID`로 실행하세요. iOS 빌드는 macOS 환경이 필요합니다.
+`emulator-5554`는 현재 Pixel Tablet 에뮬레이터의 ID입니다. 다른 에뮬레이터를 사용하는 경우 `flutter devices`에 표시된 Android 기기 ID로 바꿉니다.
 
 로그인 화면의 **목업 바로 보기**를 누르면 가상 직원으로 로그인합니다. 직접 입력할 경우 이메일 `demo@example.com`, 비밀번호 `mock1234`를 사용하세요. 실제 계정 정보는 입력하지 마세요.
 
 로그인 후 상단 직책 선택에서 대리점 직원·점장·본사 사원·팀장·이사·임원 화면을 전환할 수 있습니다. 대리점은 강남점과 성동점을 선택할 수 있습니다.
+
+목업 로그인의 대리점 ID는 현재 MySQL branches 기준으로 강남점 2, 성동점 1입니다.
+MockStore는 district_code별 실제 ID를 명시하며, 구 이름의 순서로 ID를 생성하지 않습니다.
+정식 로그인 연동 시에는 담당 B가 제공하는 직원의 실제 소속 대리점 정보를 사용해야 합니다.
 
 ## 포함한 화면
 
 - 로그인 및 직원 등록 폼
 - 직책별 대시보드·요약 카드·업무 알림
 - 입고·픽업 코드 확인·고객 수령 처리
-- 지점 및 본사 재고, 날짜 선택
+- 지점 보관 현황·상태 필터 및 본사 재고
 - 방문 반품 접수·본사 검수·가상 환불 처리
 - 주문·배송, 고객 목록 정렬·고객 상세·문의 답변
 - 구매 품의 작성, 팀장·이사 결재, 임원 판매 분석
@@ -43,7 +48,40 @@ Android 에뮬레이터 또는 Windows에서도 실행할 수 있습니다. `flu
 
 ## 분리 범위
 
-Firebase SDK·설정 파일·API 키·서비스 계정·HTTP 클라이언트·MySQL 연결·실제 사용자 데이터는 포함하지 않았습니다. 실행에 Firebase 설정과 백엔드 서버가 필요하지 않습니다. 런타임 앱 의존성은 Flutter SDK뿐입니다.
+Firebase 인증은 아직 목업입니다. 본사 재고 조회에 HTTP 클라이언트와 백엔드 서버를 사용하며, Flutter에서 MySQL에 직접 접속하지 않습니다.
+
+## 본사 재고 연결
+
+프로젝트 루트에서 백엔드를 먼저 실행합니다.
+
+```powershell
+python -m uvicorn backend.main:app --reload
+```
+
+이 앱 폴더에서 Android 에뮬레이터로 실행합니다.
+
+```powershell
+flutter run -d emulator-5554
+```
+
+목업 바로 보기 → 본사 사원(또는 팀장·이사·임원) → 재고 메뉴에서 확인합니다.
+본사 재고에 검색·정렬·페이지 이동·새로고침·오류 안내를 제공합니다.
+앱의 API 주소 기본값은 `http://10.0.2.2:8000`으로 별도 설정 없이 실행할 수 있습니다.
+`10.0.2.2`는 Android 에뮬레이터에서 개발 PC의 loopback 주소에 접근하는 특수 주소입니다.
+PC의 FastAPI는 `127.0.0.1:8000`에서 실행하며 MySQL 주소는 기존 설정을 유지합니다.
+Android의 INTERNET 권한과 debug 빌드의 로컬 HTTP 허용 설정을 사용합니다.
+Android 앱은 브라우저 CORS 검사를 사용하지 않으며 서버의 CORS 설정은 제거했습니다.
+다른 서버가 필요한 경우 `--dart-define=API_BASE_URL=http://서버주소:포트`로 재정의할 수 있습니다.
+상단 안내의 실제 조회 범위는 본사·대리점 재고 화면이며, 요약 카드·품의 화면의 데이터는 아직 목업입니다.
+
+## 대리점 보관 현황 연결
+
+대리점 직원 → 현재 재고, 또는 대리점장 → 대리점 보관 현황에서 조회합니다.
+상단 대리점 선택에 따라 `/api/v1/inventory/branches/{branch_id}`를 호출합니다.
+기본 상태는 고객 수령 대기이며 전체 이력·입고 대기·검수·수령 완료 등으로 변경할 수 있습니다.
+상품·옵션·수량·상태·주문/출고 번호·입고/수령 시각과 검색·정렬·페이지 이동을 제공합니다.
+조회 결과 수는 SKU 종류가 아니라 보관 기록 수이며, 전체 이력의 수량 합계는 현재 재고가 아닙니다.
+현재 API는 과거 날짜 기준 재고 조회를 지원하지 않아 날짜 선택은 제공하지 않습니다.
 
 - `lib/main.dart`: 앱 실행 진입점
 - `lib/model/`: 직원·직책·주문·대시보드 데이터 구조, JSON 변환, 메뉴 정보, 샘플 데이터
@@ -59,5 +97,5 @@ Firebase SDK·설정 파일·API 키·서비스 계정·HTTP 클라이언트·My
 ```powershell
 flutter analyze
 flutter test
-flutter build web --no-web-resources-cdn
+flutter build apk --debug
 ```

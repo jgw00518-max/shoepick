@@ -1,5 +1,5 @@
-import 'package:shupick_staff_mockup/model/mock_store.dart';
-import 'package:shupick_staff_mockup/model/staff_session.dart';
+import 'package:shoepick_staff_app/model/mock_store.dart';
+import 'package:shoepick_staff_app/model/staff_session.dart';
 
 abstract class StaffAuthRepository {
   Future<StaffProfile?> restoreSession();
@@ -31,7 +31,12 @@ class MockStaffAuthRepository implements StaffAuthRepository {
         ? labels.keys.toList()
         : [registered['roleCode'] as String];
     final branchRows = registered == null
-        ? store.branches.where((b) => b['branchId'] == 1 || b['branchId'] == 16)
+        ? store.branches.where(
+            (b) => {
+              'SEOUL-GANGNAM',
+              'SEOUL-SEONGDONG',
+            }.contains(b['districtCode']),
+          )
         : store.branches.where(
             (b) => b['districtCode'] == registered['districtCode'],
           );

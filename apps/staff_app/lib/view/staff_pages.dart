@@ -1,12 +1,14 @@
+import 'package:shoepick_staff_app/view/branch_inventory.dart';
 import 'package:flutter/material.dart';
-import 'package:shupick_staff_mockup/model/staff_analytics_data.dart';
-import 'package:shupick_staff_mockup/model/staff_order.dart';
-import 'package:shupick_staff_mockup/model/staff_session.dart';
-import 'package:shupick_staff_mockup/model/staff_views.dart';
-import 'package:shupick_staff_mockup/view/branch_return_registration.dart';
-import 'package:shupick_staff_mockup/view/return_refund_panel.dart';
-import 'package:shupick_staff_mockup/vm/staff_order_api.dart';
-import 'package:shupick_staff_mockup/vm/staff_work_api.dart';
+import 'package:shoepick_staff_app/model/staff_analytics_data.dart';
+import 'package:shoepick_staff_app/model/staff_order.dart';
+import 'package:shoepick_staff_app/model/staff_session.dart';
+import 'package:shoepick_staff_app/model/staff_views.dart';
+import 'package:shoepick_staff_app/view/branch_return_registration.dart';
+import 'package:shoepick_staff_app/view/return_refund_panel.dart';
+import 'package:shoepick_staff_app/vm/staff_order_api.dart';
+import 'package:shoepick_staff_app/vm/staff_work_api.dart';
+import 'package:shoepick_staff_app/vm/headquarters_inventory_api.dart';
 
 const _blue = Color(0xFF2563C6);
 const _ink = Color(0xFF1B2B40);
@@ -24,6 +26,7 @@ class StaffPage extends StatefulWidget {
     this.selectedBranchId,
     this.orderRepository,
     this.workApi,
+    this.headquartersInventoryApi,
   });
 
   final StaffView view;
@@ -32,6 +35,7 @@ class StaffPage extends StatefulWidget {
   final int? selectedBranchId;
   final StaffOrderRepository? orderRepository;
   final StaffWorkApi? workApi;
+  final HeadquartersInventoryApi? headquartersInventoryApi;
 
   @override
   State<StaffPage> createState() => _StaffPageState();
@@ -65,7 +69,13 @@ class _StaffPageState extends State<StaffPage> {
   int? selectedCustomerId;
   bool workLoading = false;
   String? workError;
-  DateTime inventoryDate = DateTime.now();
+  final inventorySearchController = TextEditingController();
+  late final HeadquartersInventoryApi headquartersInventoryApi;
+  int inventoryPage = 1;
+  int inventoryTotalCount = 0;
+  int inventoryRequestNumber = 0;
+  String inventoryKeyword = '';
+  String inventorySort = 'updated_at';
   int? selectedVariantId;
   final requestTitleController = TextEditingController();
   final requestQuantityController = TextEditingController();
@@ -88,6 +98,8 @@ class _StaffPageState extends State<StaffPage> {
     super.initState();
     orderRepository = widget.orderRepository ?? MockStaffOrderRepository();
     workApi = widget.workApi ?? StaffWorkApi();
+    headquartersInventoryApi =
+        widget.headquartersInventoryApi ?? HeadquartersInventoryApi();
     if ({
       StaffView.inbound,
       StaffView.pickup,
@@ -110,6 +122,14 @@ class _StaffPageState extends State<StaffPage> {
   }
 
   Future<void> _loadWork() async {
+    if (widget.isBranch &&
+        {StaffView.inventory, StaffView.stockLookup}.contains(widget.view)) {
+      return;
+    }
+    if (widget.view == StaffView.inventory && !widget.isBranch) {
+      await _loadHeadquartersInventory();
+      return;
+    }
     setState(() {
       workLoading = true;
       workError = null;
@@ -118,9 +138,6 @@ class _StaffPageState extends State<StaffPage> {
       if ({StaffView.inventory, StaffView.stockLookup}.contains(widget.view)) {
         inventoryData = await workApi.inventory(
           branchId: widget.isBranch ? widget.selectedBranchId : null,
-          asOf: widget.isBranch && widget.view == StaffView.inventory
-              ? inventoryDate
-              : null,
         );
       } else if (widget.view == StaffView.requests) {
         final results = await Future.wait<dynamic>([
@@ -176,6 +193,35 @@ class _StaffPageState extends State<StaffPage> {
   List<Map<String, dynamic>> get inventoryRows =>
       ((inventoryData?['rows'] as List<dynamic>?) ?? [])
           .cast<Map<String, dynamic>>();
+
+  Future<void> _loadHeadquartersInventory() async {
+    final request = ++inventoryRequestNumber;
+    setState(() {
+      workLoading = true;
+      workError = null;
+      inventoryData = null;
+    });
+    try {
+      final result = await headquartersInventoryApi.fetch(
+        page: inventoryPage,
+        keyword: inventoryKeyword,
+        sort: inventorySort,
+      );
+      if (!mounted || request != inventoryRequestNumber) return;
+      setState(() {
+        inventoryData = {'rows': result.rows};
+        inventoryTotalCount = result.totalCount;
+      });
+    } on StaffAuthException catch (error) {
+      if (mounted && request == inventoryRequestNumber) {
+        setState(() => workError = error.message);
+      }
+    } finally {
+      if (mounted && request == inventoryRequestNumber) {
+        setState(() => workLoading = false);
+      }
+    }
+  }
 
   Widget _workState() => _stack([
     _action('새로고침', onPressed: _loadWork),
@@ -432,6 +478,10 @@ class _StaffPageState extends State<StaffPage> {
 
   @override
   void dispose() {
+    inventorySearchController.dispose();
+    if (widget.headquartersInventoryApi == null) {
+      headquartersInventoryApi.close();
+    }
     pickupCodeController.dispose();
     returnNotesController.dispose();
     requestTitleController.dispose();
@@ -765,58 +815,86 @@ class _StaffPageState extends State<StaffPage> {
       ),
   ]);
 
-  Widget _branchInventory() => _stack([
-    _panel(
-      '조회 날짜',
-      '해당 날짜 마감 시점의 지점 보관 수량입니다.',
-      Wrap(
-        spacing: 12,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Text(
-            '${inventoryDate.year}-${inventoryDate.month.toString().padLeft(2, '0')}-${inventoryDate.day.toString().padLeft(2, '0')}',
-          ),
-          _action(
-            '날짜 선택',
-            onPressed: () async {
-              final date = await showDatePicker(
-                context: context,
-                initialDate: inventoryDate,
-                firstDate: DateTime(2020),
-                lastDate: DateTime.now(),
-              );
-              if (date != null && mounted) {
-                setState(() => inventoryDate = date);
-                _loadWork();
-              }
-            },
-          ),
-        ],
-      ),
-    ),
-    _workState(),
-    _inventoryTable(),
-  ]);
+  Widget _branchInventory() =>
+      BranchInventoryView(branchId: widget.selectedBranchId);
 
   Widget _hqInventory() => _stack([
-    _metrics([
-      (
-        '전체 보유',
-        '${inventoryRows.fold<int>(0, (sum, row) => sum + ((row['quantity'] as num?)?.toInt() ?? 0))}켤레',
-        '본사 기준',
+    TextField(
+      key: const Key('hq-inventory-search'),
+      controller: inventorySearchController,
+      decoration: InputDecoration(
+        labelText: '상품명 또는 상품 코드',
+        suffixIcon: IconButton(
+          tooltip: '검색',
+          icon: const Icon(Icons.search),
+          onPressed: workLoading ? null : _searchHeadquartersInventory,
+        ),
       ),
-      (
-        '재고 부족',
-        '${inventoryRows.where((row) => (row['target_quantity'] as num? ?? 0) > 0 && (row['quantity'] as num? ?? 0) / (row['target_quantity'] as num) < .3).length}종',
-        '목표의 30% 미만',
-      ),
-    ]),
+      onSubmitted: (_) => _searchHeadquartersInventory(),
+    ),
+    DropdownButton<String>(
+      value: inventorySort,
+      items: const [
+        DropdownMenuItem(value: 'updated_at', child: Text('최근 변경순')),
+        DropdownMenuItem(value: 'product_name', child: Text('상품명순')),
+        DropdownMenuItem(value: 'product_code', child: Text('상품 코드순')),
+        DropdownMenuItem(value: 'available_quantity', child: Text('가용 재고 적은순')),
+      ],
+      onChanged: workLoading
+          ? null
+          : (value) {
+              if (value == null) return;
+              setState(() {
+                inventorySort = value;
+                inventoryPage = 1;
+              });
+              _loadWork();
+            },
+    ),
     _workState(),
+    if (!workLoading && workError == null)
+      Text('조회 결과 $inventoryTotalCount종 · $inventoryPage페이지'),
     _inventoryTable(),
+    Wrap(
+      spacing: 12,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        OutlinedButton(
+          onPressed: workLoading || inventoryPage <= 1
+              ? null
+              : () {
+                  setState(() => inventoryPage--);
+                  _loadWork();
+                },
+          child: const Text('이전'),
+        ),
+        OutlinedButton(
+          onPressed:
+              workLoading ||
+                  workError != null ||
+                  inventoryPage * 20 >= inventoryTotalCount
+              ? null
+              : () {
+                  setState(() => inventoryPage++);
+                  _loadWork();
+                },
+          child: const Text('다음'),
+        ),
+      ],
+    ),
   ]);
 
-  Widget _stockLookup() => _stack([_workState(), _inventoryTable()]);
+  void _searchHeadquartersInventory() {
+    setState(() {
+      inventoryKeyword = inventorySearchController.text.trim();
+      inventoryPage = 1;
+    });
+    _loadWork();
+  }
+
+  Widget _stockLookup() => widget.isBranch
+      ? _branchInventory()
+      : _stack([_workState(), _inventoryTable()]);
 
   Widget _inventoryTable() {
     final hq = !widget.isBranch;
@@ -825,11 +903,13 @@ class _StaffPageState extends State<StaffPage> {
       hq
           ? '현재 보유·예약·가용 수량'
           : (inventoryData?['branchName'] as String? ?? '소속 지점'),
-      inventoryRows.isEmpty && !workLoading
+      workError != null || workLoading
+          ? const SizedBox.shrink()
+          : inventoryRows.isEmpty
           ? _empty('표시할 재고가 없습니다.')
           : _table(
               hq
-                  ? const ['제품', '옵션', '제품 코드', '보유', '예약', '가용', '목표']
+                  ? const ['제품', '옵션', '제품 코드', '보유', '예약', '불량', '가용']
                   : const ['제품', '옵션', '제품 코드', '보관 수량'],
               [
                 for (final row in inventoryRows)
@@ -840,8 +920,8 @@ class _StaffPageState extends State<StaffPage> {
                     '${row['quantity']}',
                     if (hq) ...[
                       '${row['reserved_quantity']}',
+                      '${row['defective_quantity'] ?? 0}',
                       '${row['available_quantity']}',
-                      '${row['target_quantity'] ?? '-'}',
                     ],
                   ],
               ],
