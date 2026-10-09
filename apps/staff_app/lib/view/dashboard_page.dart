@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:shupick_staff_mockup/model/staff_role.dart';
-import 'package:shupick_staff_mockup/model/staff_views.dart';
-import 'package:shupick_staff_mockup/view/staff_overview.dart';
-import 'package:shupick_staff_mockup/view/staff_pages.dart';
-import 'package:shupick_staff_mockup/vm/staff_order_api.dart';
-import 'package:shupick_staff_mockup/vm/staff_work_api.dart';
+import 'package:shoepick_staff_app/model/staff_role.dart';
+import 'package:shoepick_staff_app/model/staff_views.dart';
+import 'package:shoepick_staff_app/view/staff_overview.dart';
+import 'package:shoepick_staff_app/view/staff_pages.dart';
+import 'package:shoepick_staff_app/vm/staff_order_api.dart';
+import 'package:shoepick_staff_app/vm/staff_work_api.dart';
 
 const _navy = Color(0xFF19324F);
 const _blue = Color(0xFF2563C6);

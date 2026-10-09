@@ -15,7 +15,7 @@
 | `features/dashboard.py` | 운영 현황 |
 
 각 기능 파일 안에 요청·응답 모델, 업무 처리 함수, API 함수를 순서대로 작성한다.
-현재는 파일 구성과 라우터 등록까지 준비했으며 실제 업무 엔드포인트와 SQL은 미구현이다.
+본사 재고 조회를 구현했으며, 나머지 업무 엔드포인트와 SQL은 미구현이다.
 파일의 API 경로 주석은 제안이며 기존 API 확인 후 확정한다.
 
 ## 실행
@@ -38,7 +38,82 @@ python -m uvicorn main:app --reload
 
 기존 방식인 `python main.py`도 `backend/`에서 사용할 수 있다.
 API 문서는 `http://127.0.0.1:8000/docs`에서 확인한다.
-현재 업무 API가 없으므로 문서에는 업무 엔드포인트가 표시되지 않는다.
+
+직원 앱은 Android 에뮬레이터에서 `http://10.0.2.2:8000`으로 접속한다.
+이는 에뮬레이터에서 PC의 loopback 서버에 접근하는 주소이므로,
+FastAPI의 실행 주소와 MySQL의 DB_HOST는 `10.0.2.2`로 바꾸지 않는다.
+브라우저용 CORS 미들웨어는 사용하지 않는다.
+
+## 본사 재고 조회
+
+`GET /api/v1/inventory/headquarters`
+
+- `page`: 기본 1, 최소 1
+- `page_size`: 기본 20, 최대 100
+- `keyword`: 상품명 또는 상품 코드 검색
+- `product_variant_id`: 특정 상품 옵션 조회
+- `sort`: updated_at(기본), product_code, product_name, available_quantity
+- `order`: desc(기본) 또는 asc
+
+응답은 `data` 목록과 `pagination:{page,page_size,total_count}`로 구성한다.
+실물·예약·불량·가용 수량과 상품명·색상·사이즈를 반환한다.
+가용 수량은 기존 DB 생성 컬럼을 사용한다. 비활성 상품도 조회한다.
+재고 행이 없는 옵션은 제외하고, 조회 결과가 없으면 HTTP 200과 빈 목록을 반환한다.
+`updated_at`은 기존 DB의 DATETIME 값이며 시간대 변환은 하지 않는다.
+현재 직원 인증·권한 연동은 미구현이며 담당 B의 공통 의존성을 연결해야 한다.
+
+## 대리점 보관 현황 조회
+
+`GET /api/v1/inventory/branches/{branch_id}`
+
+`pickup_holdings`를 기준으로 주문 품목·출고·대리점 정보를 연결한다.
+상품명·코드·색상·사이즈는 주문 당시 `order_items` 값을 사용한다.
+응답은 `data`와 `pagination`이며 total_count는 상품 종류 수가 아니라 보관 기록 수다.
+
+- `page`, `page_size`, `keyword`, `product_variant_id`: 본사 조회와 동일
+- `holding_status`: AWAITING_ARRIVAL, INSPECTING, READY_FOR_PICKUP, PICKED_UP,
+  RECALLING, RETURNED_TO_HQ, DAMAGED, CANCELED 중 하나
+- `sort`: updated_at(기본), received_at, product_code, product_name, holding_status
+- `order`: desc(기본), asc
+
+상태 미지정 시 전체 보관 이력을 조회한다. quantity 합계가 현재 실물 재고를 의미하지 않는다.
+고객 수령 대기 상품만 조회하려면 `?holding_status=READY_FOR_PICKUP`을 지정한다.
+없는 대리점은 HTTP 404/NOT_FOUND, 있는 대리점의 결과 없음은 HTTP 200/data:[]를 반환한다.
+조회만 제공하며 입고·수령 상태를 변경하지 않는다. 직원 인증·소속 지점 권한은 아직 미연동이다.
+
+## 주문 재고 확보·해제
+
+`features/inventory.py`의 공용 Python 함수다. 주문 담당 A가 인증·주문 소유 관계를
+검증한 뒤 같은 DB 연결로 호출한다. 아직 외부 POST API나 주문 처리 자동 연결은 추가하지 않았다.
+
+```python
+from backend.features.inventory import reserve_order_inventory, release_order_inventory
+
+# 확보 시점과 만료 시각은 주문 담당이 결정한다.
+result = reserve_order_inventory(
+    db, order_id=order_id, expires_at=reservation_expires_at,
+)
+
+# 결제 완료 주문은 주문 담당이 취소 상태를 반영한 뒤 같은 연결로 호출한다.
+result = release_order_inventory(db, order_id=order_id, reason="주문 취소")
+```
+
+- 확보: PENDING_PAYMENT/PAID/PREPARING 주문의 DB 품목 수량을 예약한다.
+- 해제: PENDING_PAYMENT/CANCELED 주문의 RESERVED 예약 전체를 해제한다.
+- 두 기능 모두 실제 출고 이력이 있으면 차단한다. 출고에 소비한 예약은 해제하지 않는다.
+- 실물 수량은 유지하고 headquarters_inventory.reserved_quantity만 증감한다.
+- inventory_reservations와 inventory_movements를 함께 저장한다.
+- 같은 주문의 반복 요청은 추가 증감·이력을 만들지 않고 changed=False를 반환한다.
+- 이미 확보된 예약의 만료 시각은 변경하지 않으며, 해제·소비된 예약을 다시 확보하지 않는다.
+- expires_at은 DB에서 필수다. DB 시간 기준의 timezone 없는 datetime을 전달한다.
+  신규 예약은 DB 현재 시각보다 미래여야 한다. 임의의 유효 기간이나 자동 만료 작업은 추가하지 않았다.
+- 주문·품목·예약·재고를 잠그고 SKU 잠금 순서를 통일한다.
+- 함수 실패 시 savepoint로 함수 내부 변경을 되돌린다. 함수는 commit하지 않는다.
+  호출자는 전체 업무 성공 후 commit, 실패 시 전체 rollback을 수행해야 한다.
+  autocommit=True 연결은 허용하지 않는다. 출고 등 다른 담당의 변경도 같은 잠금 규칙을 따라야 한다.
+
+결과는 order_id, changed, reservations다. API 응답에 사용할 때는
+`{"data": result.model_dump(mode="json")}`으로 변환할 수 있다.
 
 ## DB 연결과 담당 간 호출
 
@@ -48,5 +123,5 @@ API 문서는 `http://127.0.0.1:8000/docs`에서 확인한다.
 최상위 업무 함수가 성공 시 한 번 commit한다. 예외가 나면 `get_db`가 rollback한다.
 
 성공 응답은 `data`, 실패 응답은 `error.code`와 `error.message`를 사용한다.
-FastAPI 기본 오류 응답도 팀 형식으로 통일하는 처리가 추후 필요하다.
+요청 검증 오류는 HTTP 400/INVALID_INPUT, MySQL 오류는 HTTP 500/INTERNAL_ERROR로 반환한다.
 인증·권한 검사는 담당 B의 공통 기능을 연결한 후 업무 API에 적용한다.
