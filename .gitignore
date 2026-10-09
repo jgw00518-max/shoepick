@@ -410,3 +410,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Google App Engine generated folder
+appengine-generated/
