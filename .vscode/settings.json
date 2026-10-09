@@ -1,0 +1,3 @@
+{
+  "dart.projectSearchPaths": ["apps/customer_app", "apps/staff_app"]
+}

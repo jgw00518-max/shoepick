@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Customer App",
+      "request": "launch",
+      "type": "dart",
+      "cwd": "${workspaceFolder}/apps/customer_app",
+      "program": "${workspaceFolder}/apps/customer_app/lib/main.dart"
+    }
+  ]
+}
