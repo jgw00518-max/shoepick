@@ -1,5 +1,5 @@
-import 'package:shupick_staff_mockup/model/mock_store.dart';
-import 'package:shupick_staff_mockup/model/staff_session.dart';
+import 'package:shoepick_staff_app/model/mock_store.dart';
+import 'package:shoepick_staff_app/model/staff_session.dart';
 
 /// In-memory UI simulation: this class performs no network or database calls.
 class StaffWorkApi {
@@ -13,7 +13,11 @@ class StaffWorkApi {
     'asOf': asOf?.toIso8601String(),
     'rows': [
       for (final v in store.variants)
-        {...v, if (branchId != null) 'quantity': branchId == 1 ? 3 : 2},
+        {
+          ...v,
+          if (branchId != null)
+            'quantity': branchId == MockStore.gangnamBranchId ? 3 : 2,
+        },
     ],
   };
   Future<List<Map<String, dynamic>>> branches() async => store.branches;

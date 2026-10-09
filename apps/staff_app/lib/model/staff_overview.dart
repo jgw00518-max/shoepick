@@ -1,4 +1,4 @@
-import 'package:shupick_staff_mockup/model/staff_views.dart';
+import 'package:shoepick_staff_app/model/staff_views.dart';
 
 class OverviewMetric {
   const OverviewMetric(this.label, this.value, this.caption);

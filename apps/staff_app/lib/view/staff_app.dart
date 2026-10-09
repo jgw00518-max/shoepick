@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:shupick_staff_mockup/model/staff_role.dart';
-import 'package:shupick_staff_mockup/model/staff_session.dart';
-import 'package:shupick_staff_mockup/view/dashboard_page.dart';
-import 'package:shupick_staff_mockup/view/login.dart';
-import 'package:shupick_staff_mockup/vm/staff_session.dart';
+import 'package:shoepick_staff_app/model/staff_role.dart';
+import 'package:shoepick_staff_app/model/staff_session.dart';
+import 'package:shoepick_staff_app/view/dashboard_page.dart';
+import 'package:shoepick_staff_app/view/login.dart';
+import 'package:shoepick_staff_app/vm/staff_session.dart';
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key, this.authRepository});
@@ -116,7 +116,7 @@ class _MyAppState extends State<MyApp> {
                   vertical: 6,
                 ),
                 child: Text(
-                  'UI 목업 · 가상 데이터 · 실제 계정/업무에 반영되지 않습니다.',
+                  '본사·대리점 재고는 실제 조회 · 그 외 화면은 UI 목업입니다.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.primary,

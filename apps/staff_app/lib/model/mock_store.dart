@@ -39,10 +39,41 @@ class MockStore {
     '중구': 'SEOUL-JUNG',
     '중랑구': 'SEOUL-JUNGNANG',
   };
+
+  // 현재 MySQL branches 테이블에서 확인한 ID다. 구 이름의 나열 순서로 만들지 않는다.
+  static const gangnamBranchId = 2;
+  static const seongdongBranchId = 1;
+  static const branchIdsByDistrict = {
+    'SEOUL-SEONGDONG': seongdongBranchId,
+    'SEOUL-GANGNAM': gangnamBranchId,
+    'SEOUL-GANGDONG': 3,
+    'SEOUL-GANGBUK': 4,
+    'SEOUL-GANGSEO': 5,
+    'SEOUL-GWANAK': 6,
+    'SEOUL-GWANGJIN': 7,
+    'SEOUL-GURO': 8,
+    'SEOUL-GEUMCHEON': 9,
+    'SEOUL-NOWON': 10,
+    'SEOUL-DOBONG': 11,
+    'SEOUL-DONGDAEMUN': 12,
+    'SEOUL-DONGJAK': 13,
+    'SEOUL-MAPO': 14,
+    'SEOUL-SEODAEMUN': 15,
+    'SEOUL-SEOCHO': 16,
+    'SEOUL-SEONGBUK': 17,
+    'SEOUL-SONGPA': 18,
+    'SEOUL-YANGCHEON': 19,
+    'SEOUL-YEONGDEUNGPO': 20,
+    'SEOUL-YONGSAN': 21,
+    'SEOUL-EUNPYEONG': 22,
+    'SEOUL-JONGNO': 23,
+    'SEOUL-JUNG': 24,
+    'SEOUL-JUNGNANG': 25,
+  };
   List<Map<String, dynamic>> get branches => [
     for (final entry in districts.entries)
       {
-        'branchId': districts.keys.toList().indexOf(entry.key) + 1,
+        'branchId': branchIdsByDistrict[entry.value]!,
         'branchName': 'SHOEPICK ${entry.key.replaceAll('구', '')}점',
         'districtCode': entry.value,
       },
@@ -107,7 +138,7 @@ class MockStore {
       'COMPLETED',
     ];
     for (var i = 1; i <= 10; i++) {
-      final branchId = i <= 6 ? 1 : 16;
+      final branchId = i <= 6 ? gangnamBranchId : seongdongBranchId;
       final variantId = (i - 1) % 4 + 1;
       final item = variant(variantId);
       final customerId = (i - 1) % 5 + 1;

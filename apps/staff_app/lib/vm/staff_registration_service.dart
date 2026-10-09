@@ -1,5 +1,5 @@
-import 'package:shupick_staff_mockup/model/mock_store.dart';
-import 'package:shupick_staff_mockup/model/staff_session.dart';
+import 'package:shoepick_staff_app/model/mock_store.dart';
+import 'package:shoepick_staff_app/model/staff_session.dart';
 
 abstract class StaffRegistrationRepository {
   Future<void> register({

@@ -1,7 +1,7 @@
-import 'package:shupick_staff_mockup/model/mock_store.dart';
-import 'package:shupick_staff_mockup/model/staff_session.dart';
+import 'package:shoepick_staff_app/model/mock_store.dart';
+import 'package:shoepick_staff_app/model/staff_session.dart';
 
-import 'package:shupick_staff_mockup/model/staff_order.dart';
+import 'package:shoepick_staff_app/model/staff_order.dart';
 
 abstract class StaffOrderRepository {
   Future<List<StaffOrder>> listOrders({int? branchId});
