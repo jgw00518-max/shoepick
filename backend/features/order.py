@@ -83,6 +83,169 @@ class MockPaymentResponse(BaseModel):
     data: MockPaymentResult
     message: str
 
+class OrderCreateItem(BaseModel):
+    product_variant_id: int
+    quantity: int
+
+
+class OrderCreateRequest(BaseModel):
+    branch_id: int
+    order_request_key: str
+    items: list[OrderCreateItem]
+
+
+def check_order_request(request: OrderCreateRequest) -> str:
+    """주문 요청의 기본 입력값을 확인한다."""
+
+    request_key = request.order_request_key.strip()
+
+    if request.branch_id <= 0 or not request.items:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_INPUT", "message": "주문 내용을 확인해 주세요."},
+        )
+
+    if not request_key or len(request_key) > 100:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "INVALID_INPUT",
+                "message": "주문 요청 식별자를 확인해 주세요.",
+            },
+        )
+
+    variant_ids = set()
+
+    for item in request.items:
+        if item.product_variant_id <= 0 or item.quantity <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "INVALID_INPUT",
+                    "message": "상품 옵션과 수량을 확인해 주세요.",
+                },
+            )
+
+        if item.product_variant_id in variant_ids:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "INVALID_INPUT",
+                    "message": "같은 상품 옵션이 중복되었습니다.",
+                },
+            )
+
+        variant_ids.add(item.product_variant_id)
+
+    return request_key
+
+def check_pickup_branch(db: Connection, branch_id: int) -> None:
+    """선택한 수령 대리점이 사용 가능한지 확인한다."""
+
+    with db.cursor(DictCursor) as cursor:
+        cursor.execute(
+            """
+            SELECT branch_id
+            FROM branches
+            WHERE branch_id = %s
+              AND is_active = TRUE
+            """,
+            (branch_id,),
+        )
+
+        if cursor.fetchone() is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "NOT_FOUND",
+                    "message": "사용 가능한 수령 대리점을 찾을 수 없습니다.",
+                },
+            )
+
+def check_product_option(
+    db: Connection,
+    product_variant_id: int,
+    quantity: int,
+) -> dict:
+    """상품 옵션의 판매 상태·가격·재고를 확인한다."""
+
+    with db.cursor(DictCursor) as cursor:
+        cursor.execute(
+            """
+            SELECT
+                v.product_variant_id,
+                v.product_code,
+                v.color_name,
+                v.size_mm,
+                p.product_name,
+                p.price + v.additional_price AS unit_price,
+                COALESCE(i.available_quantity, 0) AS available_quantity
+            FROM product_variants AS v
+            JOIN products AS p ON p.product_id = v.product_id
+            LEFT JOIN headquarters_inventory AS i
+                ON i.product_variant_id = v.product_variant_id
+            WHERE v.product_variant_id = %s
+              AND v.is_active = TRUE
+              AND p.is_active = TRUE
+            """,
+            (product_variant_id,),
+        )
+        product = cursor.fetchone()
+
+    if product is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "NOT_FOUND", "message": "상품 옵션을 찾을 수 없습니다."},
+        )
+
+    product["unit_price"] = int(product["unit_price"])
+
+    if product["unit_price"] < 0:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "INVALID_STATE_TRANSITION",
+                "message": "상품 가격을 확인할 수 없습니다.",
+            },
+        )
+
+    if quantity > int(product["available_quantity"]):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "INSUFFICIENT_STOCK",
+                "message": "상품 재고가 부족합니다.",
+            },
+        )
+
+    return product
+
+def prepare_order(request: OrderCreateRequest, db: Connection) -> dict:
+    """주문 저장에 필요한 상품과 금액을 준비한다."""
+
+    request_key = check_order_request(request)
+    check_pickup_branch(db, request.branch_id)
+
+    order_items = []
+    subtotal_amount = 0
+
+    for item in request.items:
+        product = check_product_option(
+            db,
+            item.product_variant_id,
+            item.quantity,
+        )
+
+        product["quantity"] = item.quantity
+        order_items.append(product)
+        subtotal_amount += product["unit_price"] * item.quantity
+
+    return {
+        "order_request_key": request_key,
+        "branch_id": request.branch_id,
+        "items": order_items,
+        "subtotal_amount": subtotal_amount,
+    }
 
 @router.get("/paid", response_model=PaidOrderListResponse)
 def get_paid_orders(
