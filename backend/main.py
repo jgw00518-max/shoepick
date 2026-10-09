@@ -7,18 +7,22 @@ from pymysql import MySQLError
 
 if __package__:
     from .features import (
+        authentication,
         dashboard,
         goods_receipts,
         inventory,
+        order_history,
         manufacturer_orders,
         purchase_approvals,
         purchase_requisitions,
     )
 else:
     from features import (
+        authentication,
         dashboard,
         goods_receipts,
         inventory,
+        order_history,
         manufacturer_orders,
         purchase_approvals,
         purchase_requisitions,
@@ -55,12 +59,14 @@ async def handle_business_error(request: Request, exc: HTTPException):
 
 # 기능별 파일에서 정의한 API를 공통 경로에 등록한다.
 for feature in (
+    authentication,
     inventory,
     purchase_requisitions,
     purchase_approvals,
     manufacturer_orders,
     goods_receipts,
     dashboard,
+    order_history,
 ):
     app.include_router(feature.router, prefix="/api/v1")
 

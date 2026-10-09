@@ -182,6 +182,8 @@ class MockProductRepository implements ProductRepository {
 
 /// 비밀번호를 영구 저장하지 않는 화면 확인용 계정입니다.
 class MockAccountRepository implements AccountRepository {
+  @override
+  Future<void> signOut() async {}
   final Map<String, String> _accounts = {'user@sole.kr': 'sole1234'};
   @override
   Future<bool> signIn(String email, String password) async =>
