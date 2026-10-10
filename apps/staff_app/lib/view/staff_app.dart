@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../vm/firebase_staff_auth.dart';
-import 'package:shupick_staff_mockup/model/staff_role.dart';
-import 'package:shupick_staff_mockup/model/staff_session.dart';
-import 'package:shupick_staff_mockup/view/dashboard_page.dart';
-import 'package:shupick_staff_mockup/view/login.dart';
-import 'package:shupick_staff_mockup/vm/staff_session.dart';
+import 'package:shoepick_staff_app/model/staff_role.dart';
+import 'package:shoepick_staff_app/model/staff_session.dart';
+import 'package:shoepick_staff_app/view/dashboard_page.dart';
+import 'package:shoepick_staff_app/view/login.dart';
+import 'package:shoepick_staff_app/vm/staff_session.dart';
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key, this.authRepository});

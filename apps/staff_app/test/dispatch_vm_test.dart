@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shupick_staff_mockup/vm/dispatch_vm.dart';
+import 'package:shoepick_staff_app/vm/dispatch_vm.dart';
 
 void main() {
   test('선택 대리점과 페이지를 전달하고 목록을 읽는다', () async {

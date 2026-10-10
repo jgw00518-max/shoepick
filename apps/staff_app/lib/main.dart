@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shupick_staff_mockup/view/staff_app.dart';
+import 'package:shoepick_staff_app/view/staff_app.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'vm/firebase_staff_auth.dart';
