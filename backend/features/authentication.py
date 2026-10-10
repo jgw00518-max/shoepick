@@ -1,6 +1,7 @@
 """B 공통 인증: 검증된 Firebase UID와 기존 MySQL 회원·직원 정보를 연결한다."""
 
 from functools import lru_cache
+import logging
 import os
 from pathlib import Path
 
@@ -74,12 +75,30 @@ def get_firebase_app():
 
 def verified_uid(token: HTTPAuthorizationCredentials | None = Depends(bearer)) -> str:
     if token is None:
+        logging.getLogger(__name__).warning('Firebase authentication failed: missing Bearer token')
         raise AuthError('UNAUTHENTICATED')
     app = get_firebase_app()
     try:
-        claims = auth.verify_id_token(token.credentials, app=app, check_revoked=True)
+        # Allow small clock differences between the local server and Firebase.
+        claims = auth.verify_id_token(
+            token.credentials, app=app, check_revoked=True, clock_skew_seconds=30,
+        )
     except (auth.InvalidIdTokenError, auth.ExpiredIdTokenError,
-            auth.RevokedIdTokenError, auth.UserDisabledError, ValueError):
+            auth.RevokedIdTokenError, auth.UserDisabledError, ValueError) as error:
+        # Log only fixed categories; exception messages may contain token data.
+        message = str(error).lower()
+        reason = next((label for keyword, label in (
+            ('used too early', 'token used too early; check system clocks'),
+            ('expired', 'token expired'),
+            ('audience', 'Firebase project audience mismatch'),
+            ('issuer', 'Firebase project issuer mismatch'),
+            ('signature', 'token signature verification failed'),
+            ('revoked', 'token revoked'),
+            ('disabled', 'Firebase user disabled'),
+        ) if keyword in message), 'token rejected')
+        logging.getLogger(__name__).warning(
+            'Firebase authentication failed: %s (%s)', type(error).__name__, reason,
+        )
         raise AuthError('UNAUTHENTICATED') from None
     return claims['uid']
 
