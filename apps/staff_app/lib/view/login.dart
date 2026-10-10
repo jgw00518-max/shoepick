@@ -3,9 +3,15 @@ import 'package:shoepick_staff_app/model/staff_session.dart';
 import 'package:shoepick_staff_app/view/staff_registration.dart';
 
 class Login extends StatefulWidget {
-  const Login({super.key, required this.onSignIn, this.initialError});
+  const Login({
+    super.key,
+    required this.onSignIn,
+    this.onPreview,
+    this.initialError,
+  });
 
   final Future<void> Function(String email, String password) onSignIn;
+  final Future<void> Function()? onPreview;
   final String? initialError;
 
   @override
@@ -44,6 +50,23 @@ class _LoginState extends State<Login> {
       if (mounted) setState(() => error = exception.message);
     } catch (_) {
       if (mounted) setState(() => error = '로그인 중 문제가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _openPreview() async {
+    if (busy || widget.onPreview == null) return;
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      await widget.onPreview!();
+    } on StaffAuthException catch (exception) {
+      if (mounted) setState(() => error = exception.message);
+    } catch (_) {
+      if (mounted) setState(() => error = '목업 화면을 열지 못했습니다. 다시 시도해주세요.');
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -197,13 +220,9 @@ class _LoginState extends State<Login> {
                       const SizedBox(height: 12),
                       TextButton(
                         key: const Key('mock-quick-login'),
-                        onPressed: busy
+                        onPressed: busy || widget.onPreview == null
                             ? null
-                            : () {
-                                emailController.text = 'demo@example.com';
-                                passwordController.text = 'mock1234';
-                                _submit();
-                              },
+                            : _openPreview,
                         child: const Text('목업 바로 보기'),
                       ),
                     ],

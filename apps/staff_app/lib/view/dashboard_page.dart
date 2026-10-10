@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../vm/purchase_requisition_api.dart';
 import 'dispatch_view.dart';
 import 'package:shoepick_staff_app/model/staff_role.dart';
 import 'package:shoepick_staff_app/model/staff_views.dart';
@@ -28,6 +29,7 @@ class DashboardPage extends StatefulWidget {
     this.orderRepository,
     this.workApi,
     this.dispatchRequest,
+    this.purchaseRequisitionApi,
   });
 
   final StaffRole initialRole;
@@ -40,6 +42,7 @@ class DashboardPage extends StatefulWidget {
   final VoidCallback onSignOut;
   final StaffOrderRepository? orderRepository;
   final StaffWorkApi? workApi;
+  final PurchaseRequisitionApi? purchaseRequisitionApi;
   final Future<Map<String, dynamic>> Function(String)? dispatchRequest;
 
   @override
@@ -160,6 +163,8 @@ class _DashboardPageState extends State<DashboardPage> {
                                       view: selectedView,
                                       roleKey: role.name,
                                       isBranch: role.isBranch,
+                                      purchaseRequisitionApi:
+                                          widget.purchaseRequisitionApi,
                                       selectedBranchId: widget.selectedBranchId,
                                       orderRepository: widget.orderRepository,
                                       workApi: widget.workApi,

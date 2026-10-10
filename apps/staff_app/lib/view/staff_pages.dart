@@ -9,6 +9,15 @@ import 'package:shoepick_staff_app/view/return_refund_panel.dart';
 import 'package:shoepick_staff_app/vm/staff_order_api.dart';
 import 'package:shoepick_staff_app/vm/staff_work_api.dart';
 import 'package:shoepick_staff_app/vm/headquarters_inventory_api.dart';
+import '../vm/purchase_requisition_api.dart';
+import '../model/purchase_requisition.dart';
+import 'matched_height_panels.dart';
+import 'purchase_requisition_edit.dart';
+import 'purchase_approval_inbox.dart';
+import '../vm/purchase_approval_api.dart';
+import 'list_order_dropdown.dart';
+import 'manufacturer_order_list.dart';
+import '../vm/manufacturer_order_api.dart';
 
 const _blue = Color(0xFF2563C6);
 const _ink = Color(0xFF1B2B40);
@@ -27,6 +36,7 @@ class StaffPage extends StatefulWidget {
     this.orderRepository,
     this.workApi,
     this.headquartersInventoryApi,
+    this.purchaseRequisitionApi,
   });
 
   final StaffView view;
@@ -36,6 +46,7 @@ class StaffPage extends StatefulWidget {
   final StaffOrderRepository? orderRepository;
   final StaffWorkApi? workApi;
   final HeadquartersInventoryApi? headquartersInventoryApi;
+  final PurchaseRequisitionApi? purchaseRequisitionApi;
 
   @override
   State<StaffPage> createState() => _StaffPageState();
@@ -51,6 +62,13 @@ class _StaffPageState extends State<StaffPage> {
   Map<String, dynamic>? inventoryData;
   Map<String, dynamic>? analyticsData;
   List<Map<String, dynamic>> requisitionData = [];
+  int requisitionPage = 1;
+  int requisitionTotalCount = 0;
+  int requisitionListRequest = 0;
+  bool requisitionListLoading = false;
+  String? requisitionListError;
+  String? requisitionStatus;
+  String requisitionOrder = 'desc';
   List<Map<String, dynamic>> inquiryData = [];
   List<Map<String, dynamic>> customerData = [];
   String customerSort = '최근 주문순';
@@ -77,9 +95,12 @@ class _StaffPageState extends State<StaffPage> {
   String inventoryKeyword = '';
   String inventorySort = 'updated_at';
   int? selectedVariantId;
+  int? selectedManufacturerId;
+  bool get liveRequisitions => widget.purchaseRequisitionApi != null;
   final requestTitleController = TextEditingController();
   final requestQuantityController = TextEditingController();
   final requestReasonController = TextEditingController();
+  final stockWarningScrollController = ScrollController();
   final decisionCommentController = TextEditingController();
   final inquiryAnswerController = TextEditingController();
   int? selectedInquiryId;
@@ -122,6 +143,11 @@ class _StaffPageState extends State<StaffPage> {
   }
 
   Future<void> _loadWork() async {
+    if (widget.view == StaffView.approvals &&
+        liveRequisitions &&
+        {'teamLeader', 'director', 'executive'}.contains(widget.roleKey)) {
+      return;
+    }
     if (widget.isBranch &&
         {StaffView.inventory, StaffView.stockLookup}.contains(widget.view)) {
       return;
@@ -140,14 +166,36 @@ class _StaffPageState extends State<StaffPage> {
           branchId: widget.isBranch ? widget.selectedBranchId : null,
         );
       } else if (widget.view == StaffView.requests) {
-        final results = await Future.wait<dynamic>([
-          workApi.inventory(),
-          workApi.requisitions(),
-        ]);
-        inventoryData = results[0] as Map<String, dynamic>;
-        requisitionData = results[1] as List<Map<String, dynamic>>;
+        if (liveRequisitions) {
+          final results = await Future.wait<dynamic>([
+            widget.purchaseRequisitionApi!.options(),
+            _loadRequisitions(),
+          ]);
+          final options = results[0] as List<Map<String, dynamic>>;
+          if (!mounted) return;
+          inventoryData = {'rows': options};
+          if (!options.any(
+            (row) => row['manufacturer_id'] == selectedManufacturerId,
+          )) {
+            selectedManufacturerId = null;
+            selectedVariantId = null;
+          } else if (!options.any(
+            (row) => row['product_variant_id'] == selectedVariantId,
+          )) {
+            selectedVariantId = null;
+          }
+        } else {
+          final results = await Future.wait<dynamic>([
+            workApi.inventory(),
+            workApi.requisitions(),
+          ]);
+          inventoryData = results[0] as Map<String, dynamic>;
+          requisitionData = results[1] as List<Map<String, dynamic>>;
+          _sortMockRequisitions();
+        }
       } else if (widget.view == StaffView.approvals) {
         requisitionData = await workApi.requisitions();
+        _sortMockRequisitions();
       } else if (widget.view == StaffView.customers &&
           widget.roleKey == 'hqStaff') {
         final results = await Future.wait<dynamic>([
@@ -187,6 +235,34 @@ class _StaffPageState extends State<StaffPage> {
       if (mounted) setState(() => workError = '업무 데이터를 불러오지 못했습니다.');
     } finally {
       if (mounted) setState(() => workLoading = false);
+    }
+  }
+
+  Future<void> _loadRequisitions() async {
+    final request = ++requisitionListRequest;
+    setState(() {
+      requisitionListLoading = true;
+      requisitionListError = null;
+    });
+    try {
+      final result = await widget.purchaseRequisitionApi!.list(
+        page: requisitionPage,
+        status: requisitionStatus,
+        order: requisitionOrder,
+      );
+      if (!mounted || request != requisitionListRequest) return;
+      setState(() {
+        requisitionData = result.rows;
+        requisitionTotalCount = result.totalCount;
+      });
+    } on StaffAuthException catch (e) {
+      if (mounted && request == requisitionListRequest) {
+        setState(() => requisitionListError = e.message);
+      }
+    } finally {
+      if (mounted && request == requisitionListRequest) {
+        setState(() => requisitionListLoading = false);
+      }
     }
   }
 
@@ -276,11 +352,21 @@ class _StaffPageState extends State<StaffPage> {
     final title = requestTitleController.text.trim();
     final reason = requestReasonController.text.trim();
     if (variantId == null ||
+        (liveRequisitions && selectedManufacturerId == null) ||
         quantity == null ||
         quantity <= 0 ||
+        quantity > 4294967295 ||
         title.isEmpty ||
+        title.length > 150 ||
+        reason.length > 2000 ||
         reason.isEmpty) {
       setState(() => workError = '제품, 수량, 제목, 사유를 모두 입력해주세요.');
+      return;
+    }
+    if (liveRequisitions &&
+        widget.isBranch &&
+        widget.selectedBranchId == null) {
+      setState(() => workError = '소속 대리점을 선택해주세요.');
       return;
     }
     if (actionBusy) return;
@@ -289,20 +375,47 @@ class _StaffPageState extends State<StaffPage> {
       workError = null;
     });
     try {
-      final created = await workApi.createRequisition(
-        productVariantId: variantId,
-        quantity: quantity,
-        title: title,
-        reason: reason,
-      );
-      await workApi.submitRequisition(created['purchaseRequisitionId'] as int);
+      if (liveRequisitions) {
+        final created = await widget.purchaseRequisitionApi!.create(
+          manufacturerId: selectedManufacturerId!,
+          productVariantId: variantId,
+          quantity: quantity,
+          title: title,
+          reason: reason,
+          branchId: widget.isBranch ? widget.selectedBranchId : null,
+        );
+        if (!mounted) return;
+        setState(() {
+          requisitionPage = 1;
+          requisitionStatus = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '구매 품의 #${created['purchase_requisition_id']}를 초안으로 저장했습니다.',
+            ),
+          ),
+        );
+      } else {
+        final created = await workApi.createRequisition(
+          productVariantId: variantId,
+          quantity: quantity,
+          title: title,
+          reason: reason,
+        );
+        await workApi.submitRequisition(
+          created['purchaseRequisitionId'] as int,
+        );
+      }
       requestTitleController.clear();
       requestQuantityController.clear();
       requestReasonController.clear();
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('구매 품의를 상신했습니다.')));
+        if (!liveRequisitions) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('구매 품의를 상신했습니다.')));
+        }
         await _loadWork();
       }
     } on StaffAuthException catch (error) {
@@ -487,6 +600,7 @@ class _StaffPageState extends State<StaffPage> {
     requestTitleController.dispose();
     requestQuantityController.dispose();
     requestReasonController.dispose();
+    stockWarningScrollController.dispose();
     decisionCommentController.dispose();
     inquiryAnswerController.dispose();
     super.dispose();
@@ -592,6 +706,14 @@ class _StaffPageState extends State<StaffPage> {
     StaffView.requests => _requests(),
     StaffView.approvals => _approvals(),
     StaffView.analytics => _analytics(),
+    StaffView.manufacturerOrders =>
+      widget.isBranch
+          ? _unavailable('제조사 발주 조회 권한이 없습니다.')
+          : widget.purchaseRequisitionApi == null
+          ? _unavailable('실제 발주 내역은 직원 로그인 후 확인할 수 있습니다.')
+          : ManufacturerOrderList(
+              api: ManufacturerOrderApi(widget.purchaseRequisitionApi!.api),
+            ),
     StaffView.overview => const SizedBox.shrink(),
   };
 
@@ -1043,12 +1165,39 @@ class _StaffPageState extends State<StaffPage> {
 
   Widget _requests() => _stack([
     _workState(),
-    _pair(
+    _requisitionPanels(
       _panel(
         '제조사 구매 품의 작성',
-        '등록한 품의는 팀장·이사 결재로 전달됩니다.',
+        liveRequisitions
+            ? '초안 저장 후 최근 품의에서 수정하거나 상신할 수 있습니다.'
+            : '등록한 품의는 팀장·이사 결재로 전달됩니다.',
         _stack([
+          if (liveRequisitions)
+            DropdownButtonFormField<int>(
+              key: const Key('requisition-manufacturer'),
+              initialValue: selectedManufacturerId,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: '제조사 선택',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                for (final entry in {
+                  for (final row in inventoryRows)
+                    row['manufacturer_id'] as int:
+                        row['manufacturer_name'] as String,
+                }.entries)
+                  DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+              ],
+              onChanged: actionBusy || workLoading
+                  ? null
+                  : (value) => setState(() {
+                      selectedManufacturerId = value;
+                      selectedVariantId = null;
+                    }),
+            ),
           DropdownButtonFormField<int>(
+            key: ValueKey('requisition-variant-$selectedManufacturerId'),
             initialValue: selectedVariantId,
             isExpanded: true,
             decoration: const InputDecoration(
@@ -1056,7 +1205,11 @@ class _StaffPageState extends State<StaffPage> {
               border: OutlineInputBorder(),
             ),
             items: [
-              for (final row in inventoryRows)
+              for (final row in inventoryRows.where(
+                (row) =>
+                    !liveRequisitions ||
+                    row['manufacturer_id'] == selectedManufacturerId,
+              ))
                 DropdownMenuItem(
                   value: row['product_variant_id'] as int,
                   child: Text(
@@ -1066,7 +1219,9 @@ class _StaffPageState extends State<StaffPage> {
                   ),
                 ),
             ],
-            onChanged: (value) => setState(() => selectedVariantId = value),
+            onChanged: actionBusy || workLoading
+                ? null
+                : (value) => setState(() => selectedVariantId = value),
           ),
           _field(
             '요청 수량 (켤레)',
@@ -1082,53 +1237,443 @@ class _StaffPageState extends State<StaffPage> {
             lines: 3,
           ),
           _action(
-            '품의 상신',
+            actionBusy
+                ? '저장 중…'
+                : liveRequisitions
+                ? '품의 초안 저장'
+                : '품의 상신',
             primary: true,
-            onPressed: _createAndSubmitRequisition,
+            onPressed: workLoading || actionBusy
+                ? null
+                : _createAndSubmitRequisition,
           ),
-        ]),
-      ),
-      _panel(
-        '재고 경고',
-        '목표 재고의 30% 미만',
-        _stack([
-          for (final row in inventoryRows.where(
-            (row) =>
-                (row['target_quantity'] as num? ?? 0) > 0 &&
-                (row['quantity'] as num? ?? 0) /
-                        (row['target_quantity'] as num) <
-                    .3,
-          ))
-            _orderCard(
-              row['product_name'].toString(),
-              '${row['color_name']} / ${row['size_mm']}',
-              '현재 ${row['quantity']} / 목표 ${row['target_quantity']}',
-              '재고 부족',
-            ),
-          if (inventoryRows.isEmpty) _empty('재고 데이터가 없습니다.'),
         ]),
       ),
     ),
     _panel(
       '최근 품의',
-      '상신 후 결재 단계를 확인하세요.',
-      requisitionData.isEmpty
-          ? _empty('품의 내역이 없습니다.')
-          : _table(
-              const ['번호', '제목', '상태'],
-              [
-                for (final row in requisitionData)
-                  [
-                    '${row['id']}',
-                    row['title'].toString(),
-                    row['status'].toString(),
-                  ],
-              ],
-            ),
+      liveRequisitions
+          ? 'DB에 저장된 품의를 선택한 작성일 순서로 표시합니다.'
+          : '상신 후 결재 단계를 확인하세요.',
+      liveRequisitions
+          ? _recentRequisitions()
+          : _stack([
+              _requisitionOrderDropdown(),
+              requisitionData.isEmpty
+                  ? _empty('품의 내역이 없습니다.')
+                  : _table(
+                      const ['번호', '제목', '상태'],
+                      [
+                        for (final row in requisitionData)
+                          [
+                            '${row['id']}',
+                            row['title'].toString(),
+                            row['status'].toString(),
+                          ],
+                      ],
+                    ),
+            ]),
     ),
   ]);
 
+  Widget _recentRequisitions() => _stack([
+    Wrap(
+      spacing: 12,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        _requisitionOrderDropdown(),
+        SizedBox(
+          width: 200,
+          child: DropdownButtonFormField<String>(
+            key: ValueKey('requisition-status-${requisitionStatus ?? 'all'}'),
+            isExpanded: true,
+            initialValue: requisitionStatus ?? '',
+            decoration: const InputDecoration(
+              labelText: '품의 상태',
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              const DropdownMenuItem(value: '', child: Text('전체 상태')),
+              for (final entry in requisitionStatusLabels.entries)
+                DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+            ],
+            onChanged: requisitionListLoading || workLoading || actionBusy
+                ? null
+                : (value) {
+                    setState(() {
+                      requisitionStatus = value == '' ? null : value;
+                      requisitionPage = 1;
+                    });
+                    _loadRequisitions();
+                  },
+          ),
+        ),
+        OutlinedButton.icon(
+          key: const Key('requisition-refresh'),
+          onPressed: requisitionListLoading || workLoading || actionBusy
+              ? null
+              : _loadRequisitions,
+          icon: const Icon(Icons.refresh, size: 18),
+          label: const Text('목록 새로고침'),
+        ),
+        Text('총 $requisitionTotalCount건 · $requisitionPage페이지'),
+      ],
+    ),
+    if (requisitionListLoading) const LinearProgressIndicator(),
+    if (requisitionListError != null)
+      _notice(requisitionListError!, warning: true),
+    if (!requisitionListLoading && requisitionListError == null)
+      requisitionData.isEmpty
+          ? _empty('품의 내역이 없습니다.')
+          : SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: [
+                  for (final label in [
+                    '번호',
+                    '제목',
+                    '작성자',
+                    '상태',
+                    '작성일',
+                    '수정',
+                    '상신',
+                  ])
+                    DataColumn(label: Text(label)),
+                ],
+                rows: [
+                  for (final row in requisitionData)
+                    DataRow(
+                      cells: [
+                        for (final value in [
+                          '${row['id']}',
+                          row['title'].toString(),
+                          row['employee_name'].toString(),
+                          requisitionStatusLabels[row['status']] ??
+                              row['status'].toString(),
+                          (row['created_at'] as String)
+                              .replaceFirst('T', ' ')
+                              .substring(0, 16),
+                        ])
+                          DataCell(Text(value)),
+                        DataCell(
+                          row['can_edit'] == true
+                              ? TextButton(
+                                  key: ValueKey(
+                                    'edit-requisition-${row['id']}',
+                                  ),
+                                  onPressed:
+                                      actionBusy ||
+                                          workLoading ||
+                                          requisitionListLoading
+                                      ? null
+                                      : () =>
+                                            _editRequisition(row['id'] as int),
+                                  child: const Text('수정'),
+                                )
+                              : const Text('—'),
+                        ),
+                        DataCell(
+                          row['can_submit'] == true
+                              ? TextButton(
+                                  key: ValueKey(
+                                    'submit-requisition-${row['id']}',
+                                  ),
+                                  onPressed:
+                                      actionBusy ||
+                                          workLoading ||
+                                          requisitionListLoading
+                                      ? null
+                                      : () => _submitRequisition(
+                                          row['id'] as int,
+                                        ),
+                                  child: const Text('상신'),
+                                )
+                              : const Text('—'),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+    Row(
+      children: [
+        OutlinedButton(
+          key: const Key('requisition-previous'),
+          onPressed:
+              requisitionListLoading ||
+                  workLoading ||
+                  actionBusy ||
+                  requisitionPage <= 1
+              ? null
+              : () {
+                  setState(() => requisitionPage--);
+                  _loadRequisitions();
+                },
+          child: const Text('이전'),
+        ),
+        const SizedBox(width: 8),
+        OutlinedButton(
+          key: const Key('requisition-next'),
+          onPressed:
+              requisitionListLoading ||
+                  workLoading ||
+                  actionBusy ||
+                  requisitionPage * 20 >= requisitionTotalCount
+              ? null
+              : () {
+                  setState(() => requisitionPage++);
+                  _loadRequisitions();
+                },
+          child: const Text('다음'),
+        ),
+      ],
+    ),
+  ]);
+
+  void _sortMockRequisitions() {
+    requisitionData.sort((a, b) {
+      final at =
+          DateTime.tryParse(
+            '${a['createdAt'] ?? a['created_at']}',
+          )?.millisecondsSinceEpoch ??
+          0;
+      final bt =
+          DateTime.tryParse(
+            '${b['createdAt'] ?? b['created_at']}',
+          )?.millisecondsSinceEpoch ??
+          0;
+      final byDate = at.compareTo(bt);
+      final comparison = byDate != 0
+          ? byDate
+          : (a['id'] as int).compareTo(b['id'] as int);
+      return requisitionOrder == 'asc' ? comparison : -comparison;
+    });
+  }
+
+  Widget _requisitionOrderDropdown() => ListOrderDropdown(
+    value: requisitionOrder,
+    onChanged: requisitionListLoading || workLoading || actionBusy
+        ? null
+        : (value) {
+            setState(() {
+              requisitionOrder = value;
+              requisitionPage = 1;
+            });
+            if (liveRequisitions) {
+              _loadRequisitions();
+            } else {
+              _loadWork();
+            }
+          },
+  );
+
+  Future<void> _editRequisition(int id) async {
+    if (actionBusy) return;
+    setState(() => actionBusy = true);
+    try {
+      final saved = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => PurchaseRequisitionEdit(
+          api: widget.purchaseRequisitionApi!,
+          id: id,
+        ),
+      );
+      if (!mounted) return;
+      if (saved == true) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('품의 #$id 초안을 수정했습니다.')));
+      }
+      await _loadRequisitions();
+    } finally {
+      if (mounted) setState(() => actionBusy = false);
+    }
+  }
+
+  Future<void> _submitRequisition(int id) async {
+    if (actionBusy) return;
+    setState(() {
+      actionBusy = true;
+      workError = null;
+    });
+    try {
+      final detail = await widget.purchaseRequisitionApi!.detail(id);
+      if (!mounted) return;
+      if (detail['requisition_status'] != 'DRAFT') {
+        throw const StaffAuthException('초안 상태의 품의만 상신할 수 있습니다. 목록을 다시 확인해주세요.');
+      }
+      final confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('품의 #$id 상신'),
+          content: SizedBox(
+            width: 600,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    detail['title'] as String,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(detail['reason'] as String),
+                  const SizedBox(height: 12),
+                  for (final item in detail['items'] as List<dynamic>)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        '${item['product_name']} · ${item['color_name']} / ${item['size_mm']} · ${item['requested_quantity']}켤레',
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  const Text('팀장 결재로 전달합니다. 상신 후에는 초안을 수정할 수 없습니다.'),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('취소'),
+            ),
+            FilledButton(
+              key: const Key('confirm-requisition-submit'),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('상신 확인'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      await widget.purchaseRequisitionApi!.submit(
+        id,
+        detail['revision'] as String,
+      );
+      if (!mounted) return;
+      setState(() {
+        requisitionStatus = null;
+        requisitionPage = 1;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('품의 #$id를 상신했습니다. 팀장 결재 대기 상태입니다.')),
+      );
+      await _loadRequisitions();
+    } on StaffAuthException catch (e) {
+      if (!mounted) return;
+      await _loadRequisitions();
+      if (mounted) setState(() => workError = e.message);
+    } finally {
+      if (mounted) setState(() => actionBusy = false);
+    }
+  }
+
+  Widget _requisitionPanels(Widget form) => LayoutBuilder(
+    builder: (context, constraints) {
+      if (constraints.maxWidth < 820) {
+        return _stack([form, _stockWarningPanel(besideForm: false)]);
+      }
+      return MatchedHeightPanels(
+        first: form,
+        second: _stockWarningPanel(besideForm: true),
+      );
+    },
+  );
+
+  Widget _stockWarningPanel({required bool besideForm}) {
+    final warnings = inventoryRows
+        .where(
+          (row) =>
+              (row['target_quantity'] as num? ?? 0) > 0 &&
+              (row['quantity'] as num? ?? 0) / (row['target_quantity'] as num) <
+                  .3,
+        )
+        .toList();
+    final list = Scrollbar(
+      controller: stockWarningScrollController,
+      thumbVisibility: true,
+      child: ListView.separated(
+        controller: stockWarningScrollController,
+        primary: false,
+        padding: const EdgeInsets.only(right: 10),
+        itemCount: warnings.isEmpty ? 1 : warnings.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 6),
+        itemBuilder: (context, index) {
+          if (warnings.isEmpty) {
+            return _empty(
+              inventoryRows.isEmpty ? '재고 데이터가 없습니다.' : '재고 부족 제품이 없습니다.',
+            );
+          }
+          final row = warnings[index];
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              border: Border.all(color: _line),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        row['product_name'].toString(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${row['color_name']} / ${row['size_mm']}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11, color: _muted),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${row['quantity']} / ${row['target_quantity']}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: _red,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    return _panel(
+      '재고 경고',
+      '목표 재고의 30% 미만 · ${warnings.length}개 옵션',
+      besideForm ? Expanded(child: list) : SizedBox(height: 280, child: list),
+    );
+  }
+
   Widget _approvals() {
+    if (liveRequisitions &&
+        {'teamLeader', 'director', 'executive'}.contains(widget.roleKey)) {
+      return PurchaseApprovalInbox(
+        api: PurchaseApprovalApi(widget.purchaseRequisitionApi!.api),
+        stage: widget.roleKey == 'executive'
+            ? 'EXECUTIVE'
+            : widget.roleKey == 'teamLeader'
+            ? 'TEAM_LEAD'
+            : 'DIRECTOR',
+      );
+    }
     final team = widget.roleKey == 'teamLeader';
     final director = widget.roleKey == 'director';
     final executive = widget.roleKey == 'executive';
@@ -1148,6 +1693,7 @@ class _StaffPageState extends State<StaffPage> {
       ),
       _flow(),
       _workState(),
+      _requisitionOrderDropdown(),
       _panel(
         executive
             ? '결재 현황'

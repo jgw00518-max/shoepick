@@ -13,6 +13,7 @@ enum StaffView {
   shipping,
   requests,
   approvals,
+  manufacturerOrders,
   analytics,
 }
 
@@ -49,22 +50,26 @@ List<StaffMenu> menusForRole(String role) => switch (role) {
     StaffMenu(StaffView.shipping, '배송', Icons.local_shipping_outlined),
     StaffMenu(StaffView.inventory, '재고', Icons.warehouse_outlined),
     StaffMenu(StaffView.requests, '품의 작성', Icons.edit_note_outlined),
+    StaffMenu(StaffView.manufacturerOrders, '제조사 발주', Icons.factory_outlined),
   ],
   'teamLeader' => const [
     StaffMenu(StaffView.overview, '대시보드', Icons.dashboard_outlined),
     StaffMenu(StaffView.approvals, '결재함', Icons.fact_check_outlined),
     StaffMenu(StaffView.inventory, '재고', Icons.warehouse_outlined),
+    StaffMenu(StaffView.manufacturerOrders, '제조사 발주', Icons.factory_outlined),
   ],
   'director' => const [
     StaffMenu(StaffView.overview, '대시보드', Icons.dashboard_outlined),
     StaffMenu(StaffView.approvals, '결재함', Icons.fact_check_outlined),
     StaffMenu(StaffView.inventory, '재고', Icons.warehouse_outlined),
+    StaffMenu(StaffView.manufacturerOrders, '제조사 발주', Icons.factory_outlined),
   ],
   _ => const [
     StaffMenu(StaffView.overview, '경영 대시보드', Icons.dashboard_outlined),
     StaffMenu(StaffView.analytics, '판매 분석', Icons.bar_chart_outlined),
     StaffMenu(StaffView.inventory, '재고·발주', Icons.warehouse_outlined),
     StaffMenu(StaffView.approvals, '결재 현황', Icons.fact_check_outlined),
+    StaffMenu(StaffView.manufacturerOrders, '제조사 발주', Icons.factory_outlined),
   ],
 };
 
@@ -86,6 +91,7 @@ String viewTitle(
   StaffView.requests => '제조사 구매 품의',
   StaffView.approvals => '결재함',
   StaffView.analytics => '판매 분석',
+  StaffView.manufacturerOrders => '제조사 발주 내역',
 };
 
 String viewDescription(
@@ -120,4 +126,5 @@ String viewDescription(
   StaffView.requests => '재고 부족 상품의 제조사 구매 품의를 작성하세요.',
   StaffView.approvals => '담당 단계의 품의를 검토하고 결재하세요.',
   StaffView.analytics => '기간·제품·대리점별 판매 현황을 조회하세요.',
+  StaffView.manufacturerOrders => '발주 당시 품목과 수량, 등록 내역을 확인하세요.',
 };

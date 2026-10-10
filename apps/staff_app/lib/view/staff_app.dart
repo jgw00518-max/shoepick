@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../vm/firebase_staff_auth.dart';
+import '../vm/purchase_requisition_api.dart';
 import 'package:shoepick_staff_app/model/staff_role.dart';
 import 'package:shoepick_staff_app/model/staff_session.dart';
 import 'package:shoepick_staff_app/view/dashboard_page.dart';
@@ -21,6 +22,7 @@ class _MyAppState extends State<MyApp> {
   int? selectedBranchId;
   bool loading = true;
   String? initialError;
+  bool isPreview = false;
 
   @override
   void initState() {
@@ -80,16 +82,33 @@ class _MyAppState extends State<MyApp> {
       profile = signedIn;
       selectedBranchId = signedIn.branches.firstOrNull?.id;
       initialError = null;
+      isPreview = authRepository is MockStaffAuthRepository;
+    });
+  }
+
+  Future<void> _openPreview() async {
+    final staff = await MockStaffAuthRepository().signIn(
+      'demo@example.com',
+      'mock1234',
+    );
+    _validateProfile(staff);
+    if (!mounted) return;
+    setState(() {
+      profile = staff;
+      selectedBranchId = staff.branches.firstOrNull?.id;
+      initialError = null;
+      isPreview = true;
     });
   }
 
   Future<void> _signOut() async {
-    await authRepository.signOut();
+    if (!isPreview) await authRepository.signOut();
     if (!mounted) return;
     setState(() {
       profile = null;
       selectedBranchId = null;
       initialError = null;
+      isPreview = false;
     });
   }
 
@@ -117,7 +136,9 @@ class _MyAppState extends State<MyApp> {
                   vertical: 6,
                 ),
                 child: Text(
-                  '본사·대리점 재고는 실제 조회 · 그 외 화면은 UI 목업입니다.',
+                  isPreview
+                      ? '목업 모드 · 가상 직원으로 화면 확인 중 · 재고는 서버 조회, 그 외 UI 목업'
+                      : '본사·대리점 재고는 실제 조회 · 그 외 화면은 UI 목업입니다.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.primary,
@@ -150,10 +171,20 @@ class _MyAppState extends State<MyApp> {
       home: loading
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : staff == null
-          ? Login(onSignIn: _signIn, initialError: initialError)
+          ? Login(
+              onSignIn: _signIn,
+              onPreview: _openPreview,
+              initialError: initialError,
+            )
           : DashboardPage(
-              key: ValueKey(staff.id),
-              dispatchRequest: authRepository is FirebaseStaffAuth
+              purchaseRequisitionApi:
+                  !isPreview && authRepository is FirebaseStaffAuth
+                  ? PurchaseRequisitionApi(
+                      (authRepository as FirebaseStaffAuth).api,
+                    )
+                  : null,
+              key: ValueKey('${isPreview ? 'preview' : 'live'}-${staff.id}'),
+              dispatchRequest: !isPreview && authRepository is FirebaseStaffAuth
                   ? (authRepository as FirebaseStaffAuth).api.getResponse
                   : null,
               initialRole: allowedRoles.first,
