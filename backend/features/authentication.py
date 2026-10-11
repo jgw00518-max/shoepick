@@ -5,7 +5,7 @@ import logging
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.routing import APIRoute
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -46,6 +46,8 @@ class AuthRoute(APIRoute):
                 return JSONResponse(status_code=400, content={'error': {
                     'code': 'INVALID_INPUT', 'message': '입력값을 확인해주세요.',
                 }})
+            except HTTPException:
+                raise
             except Exception:
                 return JSONResponse(status_code=500, content={'error': {
                     'code': 'INTERNAL_ERROR', 'message': '서버 처리 중 오류가 발생했습니다.',

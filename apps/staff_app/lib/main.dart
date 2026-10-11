@@ -9,6 +9,13 @@ export 'package:shoepick_staff_app/view/staff_app.dart' show MyApp;
 /// Firebase 초기화 후 실제 직원 인증을 기존 앱에 주입한다.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  runApp(await createStaffApp());
+}
+
+Future<MyApp> createStaffApp({
+  bool previewOnly = const bool.fromEnvironment('STAFF_PREVIEW_ONLY'),
+}) async {
+  if (previewOnly) return const MyApp();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(MyApp(authRepository: FirebaseStaffAuth()));
+  return MyApp(authRepository: FirebaseStaffAuth());
 }
