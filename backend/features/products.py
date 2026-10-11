@@ -20,6 +20,9 @@ class ProductResponse(BaseModel):
     product_name: str
     price: int
     image_url: str | None
+    category_id: int | None
+    category_name: str | None
+    product_description: str | None = None
 
 
 class ProductListResponse(BaseModel):
@@ -43,7 +46,7 @@ class ProductOptionListResponse(BaseModel):
 def get_products(
     db: Connection = Depends(get_db),
 ) -> ProductListResponse:
-    """판매 중인 상품 목록을 조회한다."""
+    """판매 중인 상품과 연결된 카테고리를 조회한다."""
 
     with db.cursor(DictCursor) as cursor:
         cursor.execute(
@@ -51,7 +54,10 @@ def get_products(
             SELECT
                 p.product_id,
                 p.product_name,
+                p.product_description,
                 p.price,
+                c.category_id,
+                c.category_name,
                 (
                     SELECT pi.image_url
                     FROM product_images AS pi
@@ -62,6 +68,8 @@ def get_products(
                     LIMIT 1
                 ) AS image_url
             FROM products AS p
+            LEFT JOIN categories AS c
+                ON c.category_id = p.category_id
             WHERE p.is_active = TRUE
             ORDER BY p.product_id
             """

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 enum StaffView {
   overview,
+  manufacturers,
   inbound,
   pickup,
   returns,
@@ -15,6 +16,8 @@ enum StaffView {
   approvals,
   manufacturerOrders,
   analytics,
+  products,
+  payments,
 }
 
 class StaffMenu {
@@ -45,11 +48,13 @@ List<StaffMenu> menusForRole(String role) => switch (role) {
   'hqStaff' => const [
     StaffMenu(StaffView.overview, '대시보드', Icons.dashboard_outlined),
     StaffMenu(StaffView.orders, '주문', Icons.receipt_long_outlined),
+    StaffMenu(StaffView.payments,'결제 확인', Icons.payments_outlined,),
     StaffMenu(StaffView.customers, '고객 관리', Icons.people_outline),
     StaffMenu(StaffView.returns, '반품 검수', Icons.assignment_return_outlined),
     StaffMenu(StaffView.shipping, '배송', Icons.local_shipping_outlined),
     StaffMenu(StaffView.inventory, '재고', Icons.warehouse_outlined),
     StaffMenu(StaffView.requests, '품의 작성', Icons.edit_note_outlined),
+    StaffMenu(StaffView.manufacturers, '제조사 관리', Icons.factory_outlined,),
     StaffMenu(StaffView.manufacturerOrders, '제조사 발주', Icons.factory_outlined),
   ],
   'teamLeader' => const [
@@ -78,7 +83,10 @@ String viewTitle(
   required bool isBranch,
   required String role,
 }) => switch (view) {
+  StaffView.payments => '결제 확인',
+  StaffView.products => '상품 관리',
   StaffView.overview => role == 'executive' ? '판매·재고 현황' : '대시보드',
+  StaffView.manufacturers => '제조사 관리',
   StaffView.inbound => '입고 관리',
   StaffView.pickup => '고객 상품 수령',
   StaffView.returns => isBranch ? '반품 접수·현황' : '반품 검수',
@@ -99,6 +107,9 @@ String viewDescription(
   required bool isBranch,
   required String role,
 }) => switch (view) {
+  StaffView.payments => '전체 지점의 결제 기록과 금액·결제 상태를 확인하세요.',
+  StaffView.products => '상품 정보와 가격·판매 상태를 확인하세요.',
+  StaffView.manufacturers => '등록된 제조사와 연락처를 확인하세요.',
   StaffView.overview => switch (role) {
     'branchStaff' => '입고·픽업 결제 코드 확인·반품 현황',
     'branchManager' => '지점 재고와 입고·픽업 업무',

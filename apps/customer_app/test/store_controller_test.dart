@@ -19,7 +19,7 @@ void main() {
     expect(navigation.page, StorePage.home);
   });
 
-  test('목업 상품 조회와 장바구니 주문 흐름', () async {
+  test('테스트 상품 조회와 장바구니 수량 계산', () async {
     final store = StoreController(
       productsRepository: MockProductRepository(),
       accountRepository: MockAccountRepository(),
@@ -37,24 +37,10 @@ void main() {
     store.addToCart(product, '260', product.color);
     expect(store.cartCount, 2);
     expect(store.cartTotal, product.price * 2);
-    final order = await store.placeOrder('성동구');
-    expect(order.total, product.price * 2);
-    expect(store.cart, isEmpty);
-    await store.cancelOrder(order);
-    expect(store.orders.first.canceled, isTrue);
-    await store.addReview(
-      ProductReview(
-        orderNumber: order.number,
-        itemKey: order.items.first.key,
-        rating: 5,
-        content: '편하게 신을 수 있습니다.',
-      ),
-    );
-    expect(store.hasReview(order, order.items.first), isTrue);
     store.dispose();
   });
 
-  test('바로 구매는 기존 장바구니를 보존하고 선택 결제는 선택 상품만 제거한다', () async {
+    test('장바구니에서 지정한 항목만 제거한다', () async {
     final store = StoreController(
       productsRepository: MockProductRepository(),
       accountRepository: MockAccountRepository(),
@@ -63,23 +49,26 @@ void main() {
       shoppingRepository: MockShoppingRepository(),
       supportRepository: MockSupportRepository(),
     );
+
     await store.load();
+
     final first = store.products[0];
     final second = store.products[1];
+
     store.addToCart(first, '260', first.color);
     store.addToCart(second, '270', second.color);
-    await store.placeOrder(
-      '성동구',
-      lines: [CartItem(product: first, size: '260', color: first.color)],
-      fromCart: false,
-    );
+
     expect(store.cartCount, 2);
-    await store.placeOrder(
-      '성동구',
-      lines: [CartItem(product: first, size: '260', color: first.color)],
-    );
+
+    final firstKey = store.cart
+        .firstWhere((item) => item.product.id == first.id)
+        .key;
+
+    store.removeCartKeys({firstKey});
+
     expect(store.cartCount, 1);
     expect(store.cart.single.product.id, second.id);
+
     store.dispose();
   });
 

@@ -129,12 +129,15 @@ class _OrderHistoryViewState extends State<OrderHistoryView> {
         ),
       );
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('상세 조회에 실패했습니다. 다시 선택해주세요.')),
         );
+      }
     } finally {
-      if (mounted) setState(() => _opening = false);
+      if (mounted) {
+        setState(() => _opening = false);
+      }
     }
   }
 }

@@ -187,33 +187,6 @@ class StoreController extends GetxController {
     await _saveShopping();
   }
 
-  Future<StoreOrder> placeOrder(
-    String district, {
-    List<CartItem>? lines,
-    int? paidTotal,
-    int couponDiscount = 0,
-    int pointsUsed = 0,
-    bool fromCart = true,
-  }) async {
-    final selected = List<CartItem>.of(lines ?? cart);
-    final subtotal = selected.fold(0, (sum, item) => sum + item.total);
-    final order = await orderRepository.createOrder(
-      selected,
-      district,
-      paidTotal: paidTotal ?? subtotal,
-      couponDiscount: couponDiscount,
-      pointsUsed: pointsUsed,
-    );
-    orders.insert(0, order);
-    if (fromCart) {
-      final selectedKeys = selected.map((item) => item.key).toSet();
-      cart.removeWhere((item) => selectedKeys.contains(item.key));
-    }
-    update();
-    unawaited(_saveShopping());
-    return order;
-  }
-
   Future<void> cancelOrder(StoreOrder order) async {
     final canceled = await orderRepository.cancelOrder(order);
     final index = orders.indexWhere((item) => item.number == order.number);

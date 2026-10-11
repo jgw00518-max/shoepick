@@ -7,7 +7,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 class AuthApi {
   AuthApi({FirebaseAuth? auth, String? baseUrl})
     : auth = auth ?? FirebaseAuth.instance,
-      baseUrl = baseUrl ?? const String.fromEnvironment('API_BASE_URL');
+      baseUrl = baseUrl ??
+          const String.fromEnvironment(
+            'API_BASE_URL',
+            defaultValue: 'http://10.0.2.2:8000',
+          );
 
   final FirebaseAuth auth;
   final String baseUrl;

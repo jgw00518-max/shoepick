@@ -7,10 +7,21 @@ import '../../domain/models.dart';
 import '../shared/store_widgets.dart';
 
 const searchCategories = ['전체', '운동화', '구두', '로퍼', '부츠', '샌들', '슬리퍼'];
+// 로컬 화면 확인용 상품 배치.
+// 실제 기획전 상품 배정은 추후 별도로 연결한다.
 const campaignData = <String, ({String subtitle, List<int> ids})>{
-  '이번 주 특가': (subtitle: '가볍게 시작하는 쇼핑', ids: [5, 6, 14, 19]),
-  '매일 신는 좋은 신발': (subtitle: '일상에 자연스럽게 어울리는 선택', ids: [1, 9, 10, 16]),
-  '계절의 신발': (subtitle: '지금 걷기 좋은 스타일', ids: [3, 12, 15, 21]),
+  '이번 주 특가': (
+    subtitle: '가볍게 시작하는 쇼핑',
+    ids: [1, 2],
+  ),
+  '매일 신는 좋은 신발': (
+    subtitle: '일상에 자연스럽게 어울리는 선택',
+    ids: [2, 3],
+  ),
+  '계절의 신발': (
+    subtitle: '지금 걷기 좋은 스타일',
+    ids: [3, 1],
+  ),
 };
 
 /// 원본 홈의 기획전 진입과 각 기획전 상품 묶음을 재현합니다.
@@ -134,18 +145,19 @@ class HomeScreen extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              for (final id in entry.value.ids.take(2))
+              for (final product in store.products
+                .where((product) => entry.value.ids.contains(product.id))
+                .take(2))
                 Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ProductCard(
-                      product: store.products.firstWhere((p) => p.id == id),
-                      store: store,
-                      onOpen: () =>
-                          onOpen(store.products.firstWhere((p) => p.id == id)),
-                    ),
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ProductCard(
+                    product: product,
+                    store: store,
+                    onOpen: () => onOpen(product),
                   ),
                 ),
+              ),
             ],
           ),
         ),
@@ -154,8 +166,16 @@ class HomeScreen extends StatelessWidget {
   );
 }
 
-String _campaignImage(StoreController store, int id) =>
-    store.products.firstWhere((product) => product.id == id).imageUrl;
+String _campaignImage(StoreController store, int id) {
+  for (final product in store.products) {
+    if (product.id == id) {
+      return product.imageUrl;
+    }
+  }
+
+  // 해당 상품이 없으면 기존 errorBuilder로 빈 이미지를 표시한다.
+  return '';
+}
 
 /// 원본의 성별·중분류·하위 분류·다섯 가지 정렬을 적용합니다.
 class CatalogScreen extends StatefulWidget {
@@ -339,7 +359,7 @@ class CampaignScreen extends StatelessWidget {
           height: 180,
           width: double.infinity,
           child: Image.network(
-            products.first.imageUrl,
+            products.isEmpty ? '' : products.first.imageUrl,
             fit: BoxFit.cover,
             errorBuilder: (_, _, _) => const SizedBox(),
           ),
@@ -440,6 +460,17 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   String query = '';
   String category = '전체';
+    // 실제 조회된 상품에 등록된 카테고리만 표시한다.
+  List<String> get categories {
+    final names = widget.store.products
+        .map((product) => product.category)
+        .where((name) => name.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+
+    return ['전체', ...names];
+  }
   @override
   Widget build(BuildContext context) {
     final results = widget.store.products
@@ -478,7 +509,7 @@ class _SearchScreenState extends State<SearchScreen> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             children: [
-              for (final value in searchCategories)
+              for (final value in categories)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: TextButton(

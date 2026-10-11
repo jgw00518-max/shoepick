@@ -5,6 +5,7 @@ import '../data/mock_repositories.dart';
 import '../domain/repositories.dart';
 import 'store_controller.dart';
 import 'store_navigation_controller.dart';
+import '../data/api_product_repository.dart';
 
 /// 앱에서 사용하는 저장소와 GetX 컨트롤러의 생성 책임을 모읍니다.
 class StoreBinding extends Bindings {
@@ -13,7 +14,7 @@ class StoreBinding extends Bindings {
   final AccountRepository? accountRepository;
   @override
   void dependencies() {
-    Get.lazyPut<ProductRepository>(() => MockProductRepository());
+    Get.lazyPut<ProductRepository>(() => ApiProductRepository());
     Get.lazyPut<AccountRepository>(
       () => accountRepository ?? MockAccountRepository(),
     );
