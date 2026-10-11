@@ -1,5 +1,42 @@
 # FastAPI 파일 구성
 
+## 고객 주문 생성과 30분 결제 대기 (2026-10-10)
+
+`POST /api/v1/orders`에 Firebase ID 토큰을 `Authorization: Bearer <ID_TOKEN>`으로 전달한다.
+고객 ID와 상품 가격은 서버에서 조회하며, 쿠폰·적립금 적용은 이번 API에 포함하지 않는다.
+
+```json
+{
+  "branch_id": 1,
+  "order_request_key": "새 주문마다 생성하는 고유 식별자",
+  "items": [{"product_variant_id": 1, "quantity": 2}]
+}
+```
+
+주문·항목·D의 재고 예약·생성 이력을 함께 저장한다. 실패하면 전체 rollback한다.
+성공 응답 `data`는 `order_id`, `order_number`, `order_status`, `paid_total`, `expires_at`이다.
+`expires_at`은 DB 시간 기준이며 기존 DB의 DATETIME처럼 시간대 표시가 없다.
+같은 요청 식별자로 같은 고객·대리점·품목을 재전송하면 기존 주문을 반환하고
+재고를 추가 예약하거나 만료 시각을 연장하지 않는다. 다른 내용은 HTTP 409다.
+
+모의 결제 `POST /api/v1/orders/{order_id}/mock-payment`에도 고객 ID 토큰이 필요하다.
+본인 주문과 유효한 재고 예약을 검사하며, 30분이 지난 미결제 주문은
+`CANCELED`로 변경하고 재고를 해제한 뒤 HTTP 409/PAYMENT_EXPIRED를 반환한다.
+결제 성공 후에는 결제 대기 만료 작업이 예약을 해제하지 않는다.
+
+앱을 닫은 고객의 주문도 정리하려면 서버와 별도 터미널에서 다음 작업을 실행한다.
+
+```powershell
+python -m backend.expire_pending_orders
+```
+
+30초마다 최대 100건을 처리한다. 만료된 예약은 주기 작업 시점에 반환되며,
+만료 직후부터 결제는 차단된다. 작업을 중단하면 주기 정리도 중단된다.
+1회 실행은 `python -m backend.expire_pending_orders --once`다.
+결제와 정리 작업은 같은 주문을 잠가 먼저 처리된 상태를 다시 검사한다.
+공용 DB에서 실행하면 실제 만료 주문이 취소되므로 테스트 DB에서 먼저 검증한다.
+기존 주문 조회 API의 인증·권한 적용과 직원 결제 확인은 별도 후속 작업이다.
+
 담당 D의 기능을 `features/` 아래에 업무별 Python 파일 하나로 구성한다.
 
 | 파일 | 역할 |

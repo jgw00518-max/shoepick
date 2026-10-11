@@ -37,6 +37,17 @@ else:
 app = FastAPI(title="Shoe Store API")
 
 
+@app.exception_handler(authentication.AuthError)
+async def handle_auth_error(request: Request, exc: authentication.AuthError):
+    unauthenticated = exc.code == "UNAUTHENTICATED"
+    return JSONResponse(
+        status_code=401 if unauthenticated else 403,
+        content={"error": {"code": exc.code, "message": "로그인이 필요합니다." if unauthenticated else "접근 권한이 없습니다."}},
+        headers={"WWW-Authenticate": "Bearer"} if unauthenticated else None,
+    )
+
+
+
 @app.exception_handler(RequestValidationError)
 async def handle_invalid_input(request: Request, exc: RequestValidationError):
     return JSONResponse(

@@ -8,6 +8,7 @@ class Product {
     required this.imageUrl,
     required this.color,
     required this.gender,
+    this.description = '',
     this.middleCategory = '스니커즈',
     this.subcategory = '전체',
     this.images = const {},
@@ -21,6 +22,7 @@ class Product {
   final String imageUrl;
   final String color;
   final String gender;
+  final String description;
   final String middleCategory;
   final String subcategory;
   final Map<String, String> images;
@@ -38,19 +40,43 @@ class CartItem {
     required this.size,
     required this.color,
     this.quantity = 1,
+    this.productVariantId,
+    this.unitPrice,
   });
+
   final Product product;
   final String size;
   final String color;
   final int quantity;
+
+  // 실제 주문 요청에 전달할 상품 옵션 ID
+  final int? productVariantId;
+
+  // 상품 기본 가격 + 옵션 추가 금액
+  final int? unitPrice;
+
   String get key => '${product.id}-$size-$color';
-  int get total => product.price * quantity;
-  CartItem copyWith({int? quantity, String? size, String? color}) => CartItem(
-    product: product,
-    size: size ?? this.size,
-    color: color ?? this.color,
-    quantity: quantity ?? this.quantity,
-  );
+
+  int get total => (unitPrice ?? product.price) * quantity;
+
+  CartItem copyWith({
+    int? quantity,
+    String? size,
+    String? color,
+  }) {
+    final optionChanged =
+        (size != null && size != this.size) ||
+        (color != null && color != this.color);
+
+    return CartItem(
+      product: product,
+      size: size ?? this.size,
+      color: color ?? this.color,
+      quantity: quantity ?? this.quantity,
+      productVariantId: optionChanged ? null : productVariantId,
+      unitPrice: optionChanged ? null : unitPrice,
+    );
+  }
 }
 
 /// 주문은 서버 API로 교체할 수 있도록 화면 상태와 분리합니다.

@@ -8,6 +8,11 @@ import '../../domain/models.dart';
 import '../shared/store_widgets.dart';
 import 'review_sheet.dart';
 
+import 'package:get/get.dart';
+import '../../vm/product_options_vm.dart';
+
+import '../../model/product_option.dart';
+
 /// 상품 정보·배송 정책·리뷰와 구매 옵션을 원본 흐름대로 분리합니다.
 class ProductDetailScreen extends StatefulWidget {
   const ProductDetailScreen({
@@ -32,59 +37,84 @@ class ProductDetailScreen extends StatefulWidget {
 }
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
-  late String color;
-  String tab = '상품 정보';
-  @override
-  void initState() {
-    super.initState();
-    color = widget.product.color;
-  }
+ late final String optionsTag;
+late final ProductOptionsVm optionsVm;
 
-  List<Product> get recommendations {
-    const next = <int, List<int>>{
-      1: [5, 6, 16, 2],
-      2: [7, 9, 3, 1],
-      3: [12, 13, 2, 11],
-      4: [14, 15, 16, 5],
-      5: [1, 6, 17, 16],
-    };
-    final ids = next[widget.product.id];
-    if (ids != null) {
-      return ids
-          .map((id) => widget.store.products.firstWhere((p) => p.id == id))
-          .toList();
+String tab = '상품 정보';
+
+String get color => optionsVm.selectedColor;
+
+@override
+void initState() {
+  super.initState();
+
+  optionsTag = 'product-options-${identityHashCode(this)}';
+
+  optionsVm = Get.put(
+    ProductOptionsVm(productId: widget.product.id),
+    tag: optionsTag,
+  );
+}
+
+@override
+void dispose() {
+  Get.delete<ProductOptionsVm>(tag: optionsTag);
+  super.dispose();
+}
+
+List<Product> get recommendations {
+  // 실제 조회된 상품 중 현재 상품을 제외하고 최대 4개 표시한다.
+  // 추천 기준이 연결되기 전의 임시 표시 방식이다.
+  return widget.store.products
+      .where((product) => product.id != widget.product.id)
+      .take(4)
+      .toList();
+}
+
+      Future<void> openOptions() async {
+      if (optionsVm.loading) {
+        widget.onMessage('상품 옵션을 불러오는 중입니다.');
+        return;
+      }
+
+      if (optionsVm.error != null) {
+        widget.onMessage('상품 옵션을 불러오지 못했습니다. 다시 시도해주세요.');
+        return;
+      }
+
+      if (optionsVm.options.isEmpty) {
+        widget.onMessage('등록된 상품 옵션이 없습니다.');
+        return;
+      }
+
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (_) => ProductOptionsSheet(
+          product: widget.product,
+          store: widget.store,
+          options: List<ProductOption>.of(optionsVm.options),
+          initialColor: color,
+          onCart: (lines) {
+            widget.store.addCartItems(lines);
+            widget.onMessage('장바구니에 상품을 담았어요.');
+          },
+          onBuy: widget.onBuy,
+          onMessage: widget.onMessage,
+        ),
+      );
     }
-    return widget.store.products
-        .where(
-          (p) =>
-              p.id != widget.product.id &&
-              p.category == widget.product.category,
-        )
-        .take(4)
-        .toList();
-  }
-
-  Future<void> openOptions() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => ProductOptionsSheet(
-        product: widget.product,
-        store: widget.store,
-        initialColor: color,
-        onCart: (lines) {
-          widget.store.addCartItems(lines);
-          widget.onMessage('장바구니에 상품을 담았어요.');
-        },
-        onBuy: widget.onBuy,
-        onMessage: widget.onMessage,
-      ),
-    );
-  }
 
   @override
-  Widget build(BuildContext context) {
+Widget build(BuildContext context) {
+  return GetBuilder<ProductOptionsVm>(
+    tag: optionsTag,
+    builder: (_) => _buildContent(context),
+  );
+}
+
+Widget _buildContent(BuildContext context) {
     final ownReviews = widget.store.reviews
         .where((r) => r.itemKey.startsWith('${widget.product.id}-'))
         .toList();
@@ -138,11 +168,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     Wrap(
                       spacing: 8,
                       children: [
-                        for (final value in widget.product.colors)
+                        for (final value in optionsVm.colors)
                           ChoiceChip(
                             label: LText(value),
                             selected: color == value,
-                            onSelected: (_) => setState(() => color = value),
+                            onSelected: (_) {
+                              setState(() {
+                                optionsVm.selectColor(value);
+                              });
+                            },
                           ),
                       ],
                     ),
@@ -151,7 +185,38 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       '사이즈',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const LText('240    250    260    270    280'),
+                    if (optionsVm.loading)
+                    const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: CircularProgressIndicator(),
+                    )
+                  else if (optionsVm.error != null)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        LText(optionsVm.error!),
+                        TextButton(
+                          onPressed: optionsVm.fetchOptions,
+                          child: const LText('다시 시도'),
+                        ),
+                      ],
+                    )
+                  else if (optionsVm.colorOptions.isEmpty)
+                    const LText('등록된 옵션이 없습니다.')
+                  else
+                     Wrap(
+                      spacing: 8,
+                      children: [
+                        for (final option in optionsVm.colorOptions)
+                          Chip(
+                            label: LText(
+                              option.availableQuantity > 0
+                                  ? '${option.sizeMm}mm'
+                                  : '${option.sizeMm}mm · 품절',
+                            ),
+                          ),
+                      ],
+                    ),
                     const LText('장바구니 또는 구매하기를 누르면 옵션을 선택할 수 있어요.'),
                     const SizedBox(height: 14),
                     const LText('무료 배송    ·    30일 무료 교환'),
@@ -224,22 +289,26 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  Widget _information() => Column(
+    Widget _information() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       const SectionTitle('상품 설명'),
-      const LText(
-        '일상에 자연스럽게 어울리는 디자인과 편안한 착화감의 신발입니다. 상품 종류와 선택한 사이즈를 확인해주세요.',
+      LText(
+        widget.product.description.trim().isEmpty
+            ? '등록된 상품 설명이 없습니다.'
+            : widget.product.description,
       ),
-      const SizedBox(height: 12),
-      const LText('소재  리사이클 메시, 합성가죽\n굽 높이  35mm\n제조국  대한민국'),
       const SizedBox(height: 18),
-      const SectionTitle('상세 사진'),
-      for (final label in ['전체 실루엣', '소재와 마감', '착용 예시']) ...[
-        ProductImage(widget.product, height: 190, color: color),
-        LText(label),
-        const SizedBox(height: 10),
-      ],
+      const SectionTitle('상품 이미지'),
+      if (widget.product.imageFor(color).trim().isEmpty)
+        const LText('등록된 상품 이미지가 없습니다.')
+      else
+        ProductImage(
+          widget.product,
+          height: 190,
+          color: color,
+        ),
+      const SizedBox(height: 10),
       OutlinedButton(
         onPressed: widget.onInquiry,
         child: const LText('이 상품 문의하기'),
@@ -400,51 +469,109 @@ class ProductOptionsSheet extends StatefulWidget {
     super.key,
     required this.product,
     required this.store,
+    required this.options,
     required this.initialColor,
     required this.onCart,
     required this.onBuy,
     required this.onMessage,
   });
+
   final Product product;
   final StoreController store;
+  final List<ProductOption> options;
   final String initialColor;
   final void Function(List<CartItem>) onCart;
   final void Function(List<CartItem>) onBuy;
   final void Function(String) onMessage;
+
   @override
-  State<ProductOptionsSheet> createState() => _ProductOptionsSheetState();
+  State<ProductOptionsSheet> createState() =>
+      _ProductOptionsSheetState();
 }
 
 class _ProductOptionsSheetState extends State<ProductOptionsSheet> {
-  String? selectedColor;
+  late String selectedColor;
   final List<CartItem> selected = [];
   String? error;
 
-  String get color => selectedColor ?? widget.initialColor;
-  String _restockKey(String size) => '${widget.product.id}:$color:$size';
-  List<String> get restockable => color == '블랙'
-      ? ['260']
-      : color == '베이지'
-      ? ['240']
-      : ['250'];
-  List<String> get unavailable => color == '베이지' ? ['270'] : ['280'];
+  // API에서 받은 실제 색상만 표시한다.
+  List<String> get colors =>
+      widget.options.map((option) => option.colorName).toSet().toList();
 
-  void addOption(String size) {
-    final key = '${widget.product.id}-$size-$color';
-    final index = selected.indexWhere((item) => item.key == key);
+  String get color => selectedColor;
+
+  // 선택한 색상의 실제 사이즈만 표시한다.
+  List<ProductOption> get colorOptions {
+    final result = widget.options
+        .where((option) => option.colorName == selectedColor)
+        .toList();
+
+    result.sort((a, b) => a.sizeMm.compareTo(b.sizeMm));
+    return result;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    selectedColor = colors.contains(widget.initialColor)
+        ? widget.initialColor
+        : colors.isEmpty
+            ? ''
+            : colors.first;
+  }
+
+  void addOption(ProductOption option) {
+    if (option.availableQuantity <= 0) {
+      setState(() => error = '품절된 옵션입니다.');
+      return;
+    }
+
+    final index = selected.indexWhere(
+      (item) => item.productVariantId == option.id,
+    );
+
+    final nextQuantity = index >= 0
+        ? selected[index].quantity + 1
+        : 1;
+
+    // 재고 개수는 화면에 표시하지 않고 구매 가능 여부만 확인한다.
+    if (nextQuantity > option.availableQuantity) {
+      setState(() => error = '선택한 옵션의 구매 가능한 수량을 초과했습니다.');
+      return;
+    }
+
     setState(() {
       if (index >= 0) {
         selected[index] = selected[index].copyWith(
-          quantity: selected[index].quantity + 1,
+          quantity: nextQuantity,
         );
       } else {
         selected.add(
-          CartItem(product: widget.product, size: size, color: color),
+          CartItem(
+            product: widget.product,
+            size: '${option.sizeMm}',
+            color: option.colorName,
+            quantity: 1,
+            productVariantId: option.id,
+            unitPrice: widget.product.price + option.additionalPrice,
+          ),
         );
       }
-      selectedColor = null;
+
       error = null;
     });
+  }
+
+  void increaseQuantity(CartItem item) {
+    for (final option in widget.options) {
+      if (option.id == item.productVariantId) {
+        addOption(option);
+        return;
+      }
+    }
+
+    setState(() => error = '상품 옵션을 다시 선택해주세요.');
   }
 
   void submit(bool buy) {
@@ -452,162 +579,169 @@ class _ProductOptionsSheetState extends State<ProductOptionsSheet> {
       setState(() => error = '색상과 사이즈를 선택해 옵션을 추가해주세요.');
       return;
     }
+
+    final lines = List<CartItem>.of(selected);
+
     Navigator.pop(context);
+
     if (buy) {
-      widget.onBuy(List.of(selected));
+      widget.onBuy(lines);
     } else {
-      widget.onCart(List.of(selected));
+      widget.onCart(lines);
     }
   }
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * .78,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SectionTitle('옵션 선택'),
-            const LText('여러 옵션을 한 번에 선택할 수 있어요'),
-            const SizedBox(height: 12),
-            ListTile(
-              leading: SizedBox(
-                width: 64,
-                child: ProductImage(widget.product, height: 64, color: color),
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * .78,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SectionTitle('옵션 선택'),
+              const LText('여러 옵션을 한 번에 선택할 수 있어요'),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: SizedBox(
+                  width: 64,
+                  child: ProductImage(
+                    widget.product,
+                    height: 64,
+                    color: color,
+                  ),
+                ),
+                title: LText(widget.product.name),
+                subtitle: LText(won(widget.product.price)),
               ),
-              title: LText(widget.product.name),
-              subtitle: LText(won(widget.product.price)),
-            ),
-            const SizedBox(height: 12),
-            const LText('색상'),
-            Wrap(
-              spacing: 6,
-              children: [
-                for (final value in widget.product.colors)
-                  ChoiceChip(
-                    label: LText(value),
-                    selected: selectedColor == value,
-                    onSelected: (_) => setState(() {
-                      selectedColor = value;
-                      error = null;
-                    }),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            LText(
-              selectedColor == null
-                  ? '사이즈 · 색상 선택 후 가능'
-                  : '사이즈 · $selectedColor',
-            ),
-            Wrap(
-              spacing: 6,
-              children: [
-                for (final size in ['240', '250', '260', '270', '280'])
-                  OutlinedButton(
-                    onPressed:
-                        selectedColor == null || unavailable.contains(size)
-                        ? null
-                        : () async {
-                            if (restockable.contains(size)) {
-                              await widget.store.toggleRestock(
-                                _restockKey(size),
-                              );
-                              widget.onMessage(
-                                widget.store.restockKeys.contains(
-                                      _restockKey(size),
-                                    )
-                                    ? '재입고 알림 신청을 저장했어요.'
-                                    : '재입고 알림 신청을 취소했어요.',
-                              );
-                              if (mounted) setState(() {});
-                            } else if (!unavailable.contains(size)) {
-                              addOption(size);
-                            }
-                          },
-                    child: LText(
-                      restockable.contains(size)
-                          ? '$size\n${widget.store.restockKeys.contains(_restockKey(size)) ? '알림 신청됨' : '재입고 알림'}'
-                          : unavailable.contains(size)
-                          ? '$size\n품절'
-                          : size,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const LText('선택한 색상에 따라 사이즈별 재고와 재입고 가능 여부가 달라집니다.'),
-            const SizedBox(height: 12),
-            LText(
-              '선택한 옵션 ${selected.length}개',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            Expanded(
-              child: ListView(
+              const SizedBox(height: 12),
+              const LText('색상'),
+              Wrap(
+                spacing: 6,
                 children: [
-                  for (final item in selected)
-                    ListTile(
-                      title: LText('${item.color} · ${item.size}'),
-                      subtitle: LText(won(item.total)),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            onPressed: item.quantity <= 1
-                                ? null
-                                : () => setState(() {
-                                    final index = selected.indexOf(item);
-                                    selected[index] = item.copyWith(
-                                      quantity: item.quantity - 1,
-                                    );
-                                  }),
-                            icon: const Icon(Icons.remove),
-                          ),
-                          LText('${item.quantity}'),
-                          IconButton(
-                            onPressed: () => setState(() {
-                              final index = selected.indexOf(item);
-                              selected[index] = item.copyWith(
-                                quantity: item.quantity + 1,
-                              );
-                            }),
-                            icon: const Icon(Icons.add),
-                          ),
-                          IconButton(
-                            onPressed: () =>
-                                setState(() => selected.remove(item)),
-                            icon: const Icon(Icons.close),
-                          ),
-                        ],
+                  for (final value in colors)
+                    ChoiceChip(
+                      label: LText(value),
+                      selected: selectedColor == value,
+                      onSelected: (_) {
+                        setState(() {
+                          selectedColor = value;
+                          error = null;
+                        });
+                      },
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              LText('사이즈 · $selectedColor'),
+              Wrap(
+                spacing: 6,
+                children: [
+                  for (final option in colorOptions)
+                    OutlinedButton(
+                      onPressed: () {
+                        if (option.availableQuantity <= 0) {
+                          setState(() {
+                            error =
+                                '품절된 옵션입니다. 재입고 알림 신청 기능은 아직 연결되지 않았습니다.';
+                          });
+                          return;
+                        }
+
+                        addOption(option);
+                      },
+                      child: LText(
+                        option.availableQuantity <= 0
+                            ? '${option.sizeMm}\n재입고 알림'
+                            : '${option.sizeMm}',
                       ),
                     ),
                 ],
               ),
-            ),
-            if (error != null)
-              LText(error!, style: const TextStyle(color: Colors.red)),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => submit(false),
-                    child: const LText('장바구니'),
-                  ),
+              const SizedBox(height: 8),
+              const LText('색상과 사이즈를 선택해주세요.'),
+              const SizedBox(height: 12),
+              LText(
+                '선택한 옵션 ${selected.length}개',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: () => submit(true),
-                    child: const LText('바로 구매'),
-                  ),
+              ),
+              Expanded(
+                child: ListView(
+                  children: [
+                    for (final item in selected)
+                      ListTile(
+                        title: LText('${item.color} · ${item.size}'),
+                        subtitle: LText(won(item.total)),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              onPressed: item.quantity <= 1
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        final index =
+                                            selected.indexOf(item);
+
+                                        selected[index] = item.copyWith(
+                                          quantity: item.quantity - 1,
+                                        );
+
+                                        error = null;
+                                      });
+                                    },
+                              icon: const Icon(Icons.remove),
+                            ),
+                            LText('${item.quantity}'),
+                            IconButton(
+                              onPressed: () => increaseQuantity(item),
+                              icon: const Icon(Icons.add),
+                            ),
+                            IconButton(
+                              onPressed: () {
+                                setState(() {
+                                  selected.remove(item);
+                                  error = null;
+                                });
+                              },
+                              icon: const Icon(Icons.close),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
-              ],
-            ),
-          ],
+              ),
+              if (error != null)
+                LText(
+                  error!,
+                  style: const TextStyle(color: Colors.red),
+                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => submit(false),
+                      child: const LText('장바구니'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => submit(true),
+                      child: const LText('바로 구매'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

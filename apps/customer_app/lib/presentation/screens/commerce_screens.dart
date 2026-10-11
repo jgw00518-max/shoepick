@@ -6,33 +6,12 @@ import '../../domain/models.dart';
 import '../shared/store_widgets.dart';
 import 'review_sheet.dart';
 
-const pickupDistricts = [
-  '강남구',
-  '강동구',
-  '강북구',
-  '강서구',
-  '관악구',
-  '광진구',
-  '구로구',
-  '금천구',
-  '노원구',
-  '도봉구',
-  '동대문구',
-  '동작구',
-  '마포구',
-  '서대문구',
-  '서초구',
-  '성동구',
-  '성북구',
-  '송파구',
-  '양천구',
-  '영등포구',
-  '용산구',
-  '은평구',
-  '종로구',
-  '중구',
-  '중랑구',
-];
+import 'package:get/get.dart';
+
+import '../../model/pickup_branch.dart';
+import '../../vm/pickup_branch_vm.dart';
+
+import '../../vm/checkout_vm.dart';
 
 /// 선택 주문과 옵션 변경이 가능한 목업 장바구니입니다.
 class CartScreen extends StatefulWidget {
@@ -333,7 +312,7 @@ class _CartScreenState extends State<CartScreen> {
   }
 }
 
-/// 목업과 동일한 픽업·결제·완료 단계를 제공합니다.
+/// 실제 API로 수령 대리점 선택, 주문 생성, 모의 결제를 진행합니다.
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({
     super.key,
@@ -352,267 +331,314 @@ class CheckoutScreen extends StatefulWidget {
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
   int step = 1;
-  String district = '성동구';
-  String payment = '카드';
-  String coupon = '';
-  int points = 0;
   bool agreed = false;
-  bool submitting = false;
-  StoreOrder? created;
-  final pointsController = TextEditingController();
-  @override
-  void dispose() {
-    pointsController.dispose();
-    super.dispose();
-  }
 
-  int get subtotal => widget.lines.fold(0, (sum, item) => sum + item.total);
-  bool get sneakers =>
-      widget.lines.any((item) => item.product.category == '운동화');
-  int get discount => coupon == 'welcome' && subtotal >= 30000
-      ? 5000
-      : coupon == 'sneakers' && subtotal >= 100000 && sneakers
-      ? (subtotal * .1).round()
-      : 0;
-  int get validPoints => points.clamp(
-    0,
-    [32500, subtotal - discount].reduce((a, b) => a < b ? a : b),
-  );
-  int get total => (subtotal - discount - validPoints).clamp(0, subtotal);
+  late final String branchTag;
+  late final String checkoutTag;
+  late final PickupBranchVm branchVm;
+  late final CheckoutVm checkoutVm;
 
-  Future<void> _pay() async {
-    if (!agreed) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: LText('결제 전 필수 동의 항목을 확인해주세요.')));
-      return;
-    }
-    setState(() => submitting = true);
-    try {
-      final order = await widget.store.placeOrder(
-        district,
-        lines: widget.lines,
-        paidTotal: total,
-        couponDiscount: discount,
-        pointsUsed: validPoints,
-        fromCart: widget.fromCart,
-      );
-      if (mounted) {
-        setState(() {
-          created = order;
-          step = 3;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: LText('목업 주문을 완료하지 못했습니다.')));
-      }
-    } finally {
-      if (mounted) setState(() => submitting = false);
-    }
-  }
+  int get subtotal =>
+      widget.lines.fold(0, (sum, item) => sum + item.total);
 
   @override
-  Widget build(BuildContext context) {
-    if (step == 3) return _success();
-    return ListView(
-      padding: const EdgeInsets.all(18),
-      children: [
-        const SectionTitle('주문하기'),
-        const LText('주문 상품과 픽업 대리점을 확인해주세요.'),
-        const SizedBox(height: 14),
-        LText(
-          '1 픽업    ──    2 결제    ──    3 완료',
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 18),
-        SectionTitle(
-          '주문 상품 ${widget.lines.fold(0, (sum, item) => sum + item.quantity)}개',
-        ),
-        for (final item in widget.lines)
-          ListTile(
-            leading: SizedBox(
-              width: 64,
-              child: ProductImage(item.product, height: 64, color: item.color),
-            ),
-            title: LText(item.product.name),
-            subtitle: LText('${item.color} · ${item.size} · ${item.quantity}개'),
-            trailing: LText(won(item.total)),
-          ),
-        const Divider(height: 30),
-        if (step == 1) ...[
-          const SectionTitle('픽업 대리점'),
-          DropdownButtonFormField<String>(
-            initialValue: district,
-            decoration: const InputDecoration(
-              labelText: '서울시 자치구',
-              border: OutlineInputBorder(),
-            ),
-            items: pickupDistricts
-                .map(
-                  (value) =>
-                      DropdownMenuItem(value: value, child: LText(value)),
-                )
-                .toList(),
-            onChanged: (value) => setState(() => district = value!),
-          ),
-          const SizedBox(height: 12),
-          PickupStoreInfo(district: district),
-          const SizedBox(height: 18),
-          FilledButton(
-            onPressed: () => setState(() => step = 2),
-            child: const LText('결제 수단 선택'),
-          ),
-        ] else ...[
-          ListTile(
-            title: LText('SOLE $district점'),
-            subtitle: const LText('픽업 대리점'),
-            trailing: TextButton(
-              onPressed: () => setState(() => step = 1),
-              child: const LText('수정'),
-            ),
-          ),
-          PickupStoreInfo(district: district, compact: true),
-          const SizedBox(height: 16),
-          const SectionTitle('결제 수단'),
-          for (final method in ['카드', '카카오페이', '네이버페이'])
-            ListTile(
-              title: LText(method),
-              trailing: Icon(
-                payment == method
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-              ),
-              onTap: () => setState(() => payment = method),
-            ),
-          const SizedBox(height: 10),
-          const LText('쿠폰 선택'),
-          DropdownButtonFormField<String>(
-            initialValue: coupon,
-            items: [
-              const DropdownMenuItem(value: '', child: LText('쿠폰을 선택하세요')),
-              DropdownMenuItem(
-                value: 'welcome',
-                enabled: subtotal >= 30000,
-                child: const LText('앱 첫 구매 5,000원 할인 (3만원 이상)'),
-              ),
-              DropdownMenuItem(
-                value: 'sneakers',
-                enabled: subtotal >= 100000 && sneakers,
-                child: const LText('운동화 10% 할인 (10만원 이상)'),
-              ),
-            ],
-            onChanged: (value) => setState(() {
-              coupon = value!;
-              points = validPoints;
-            }),
-          ),
-          const SizedBox(height: 12),
-          const LText('적립금 사용 · 보유 32,500P'),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: pointsController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(hintText: '0'),
-                  onChanged: (value) => setState(
-                    () => points =
-                        int.tryParse(value.replaceAll(RegExp(r'\D'), '')) ?? 0,
-                  ),
-                ),
-              ),
-              TextButton(
-                onPressed: () => setState(() {
-                  points = [
-                    32500,
-                    subtotal - discount,
-                  ].reduce((a, b) => a < b ? a : b);
-                  pointsController.text = '$points';
-                }),
-                child: const LText('전액 사용'),
-              ),
-            ],
-          ),
-          const Divider(height: 30),
-          _amount('상품 금액', subtotal),
-          if (discount > 0) _amount('쿠폰 할인', -discount),
-          if (validPoints > 0) _amount('적립금 사용', -validPoints),
-          _amount('최종 결제', total, bold: true),
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            value: agreed,
-            onChanged: (value) => setState(() => agreed = value ?? false),
-            title: const LText('필수 · 개인정보 수집 및 구매 조건에 동의합니다.'),
-          ),
-          FilledButton(
-            onPressed: submitting ? null : _pay,
-            child: LText(submitting ? '처리 중...' : '$payment로 ${won(total)} 결제'),
-          ),
-        ],
-      ],
+  void initState() {
+    super.initState();
+
+    branchTag = 'pickup-${identityHashCode(this)}';
+    checkoutTag = 'checkout-${identityHashCode(this)}';
+
+    branchVm = Get.put(
+      PickupBranchVm(),
+      tag: branchTag,
+    );
+
+    checkoutVm = Get.put(
+      CheckoutVm(),
+      tag: checkoutTag,
     );
   }
 
-  Widget _amount(String label, int value, {bool bold = false}) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
+  @override
+  void dispose() {
+    Get.delete<PickupBranchVm>(tag: branchTag);
+    Get.delete<CheckoutVm>(tag: checkoutTag);
+    super.dispose();
+  }
+
+  Future<void> _pay() async {
+    if (!agreed || checkoutVm.submitting) return;
+
+    final branchId = branchVm.selectedBranchId;
+    if (branchId == null) return;
+
+    final completed = await checkoutVm.pay(
+      branchId: branchId,
+      lines: widget.lines,
+      expectedTotal: subtotal,
+    );
+
+    if (!mounted || !completed) return;
+
+    if (widget.fromCart) {
+      widget.store.removeCartKeys(
+        widget.lines.map((item) => item.key).toSet(),
+      );
+    }
+
+    setState(() => step = 3);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GetBuilder<PickupBranchVm>(
+      tag: branchTag,
+      builder: (_) => GetBuilder<CheckoutVm>(
+        tag: checkoutTag,
+        builder: (_) => _buildContent(context),
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
+    if (step == 3) return _success();
+
+    // 요청 중 화면을 나가 중복 주문하는 실수를 줄인다.
+    return PopScope(
+      canPop: !checkoutVm.submitting,
+      child: ListView(
+        padding: const EdgeInsets.all(18),
+        children: [
+          const SectionTitle('주문하기'),
+          const LText('주문 상품과 픽업 대리점을 확인해주세요.'),
+          const SizedBox(height: 14),
+          const LText(
+            '1 픽업    ──    2 결제    ──    3 완료',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 18),
+          SectionTitle(
+            '주문 상품 ${widget.lines.fold(0, (sum, item) => sum + item.quantity)}개',
+          ),
+          for (final item in widget.lines)
+            ListTile(
+              leading: SizedBox(
+                width: 64,
+                child: ProductImage(
+                  item.product,
+                  height: 64,
+                  color: item.color,
+                ),
+              ),
+              title: LText(item.product.name),
+              subtitle: LText(
+                '${item.color} · ${item.size} · ${item.quantity}개',
+              ),
+              trailing: LText(won(item.total)),
+            ),
+          const Divider(height: 30),
+
+          if (step == 1) ...[
+            const SectionTitle('픽업 대리점'),
+            if (branchVm.loading)
+              const Center(child: CircularProgressIndicator())
+            else if (branchVm.error != null)
+              Column(
+                children: [
+                  LText(branchVm.error!),
+                  TextButton(
+                    onPressed: branchVm.fetchBranches,
+                    child: const LText('다시 시도'),
+                  ),
+                ],
+              )
+            else if (branchVm.branches.isEmpty)
+              const LText('선택 가능한 대리점이 없습니다.')
+            else
+              DropdownButtonFormField<int>(
+                key: ValueKey(branchVm.selectedBranchId),
+                initialValue: branchVm.selectedBranchId,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: '수령 대리점',
+                  border: OutlineInputBorder(),
+                ),
+                items: branchVm.branches
+                    .map(
+                      (branch) => DropdownMenuItem<int>(
+                        value: branch.id,
+                        child: LText(branch.name),
+                      ),
+                    )
+                    .toList(),
+                onChanged: branchVm.selectBranch,
+              ),
+            const SizedBox(height: 12),
+            if (branchVm.selectedBranch != null)
+              PickupStoreInfo(branch: branchVm.selectedBranch!),
+            const SizedBox(height: 18),
+            FilledButton(
+              onPressed:
+                  branchVm.loading || branchVm.selectedBranch == null
+                      ? null
+                      : () => setState(() => step = 2),
+              child: const LText('결제 수단 선택'),
+            ),
+          ],
+
+          if (step == 2) ...[
+            ListTile(
+              title: LText(branchVm.selectedBranch?.name ?? ''),
+              subtitle: const LText('픽업 대리점'),
+              trailing: TextButton(
+                // 주문 요청을 시작한 뒤에는 같은 주문으로 재시도한다.
+                onPressed: checkoutVm.submitting ||
+                        checkoutVm.orderId != null ||
+                        checkoutVm.error != null
+                    ? null
+                    : () => setState(() => step = 1),
+                child: const LText('수정'),
+              ),
+            ),
+            if (branchVm.selectedBranch != null)
+              PickupStoreInfo(
+                branch: branchVm.selectedBranch!,
+                compact: true,
+              ),
+            const SizedBox(height: 16),
+            const SectionTitle('결제 수단'),
+            const ListTile(
+              title: LText('모의 결제'),
+              subtitle: LText('테스트용 · 실제 금액이 청구되지 않습니다.'),
+              trailing: Icon(Icons.radio_button_checked),
+            ),
+            const SizedBox(height: 10),
+
+            const LText('쿠폰 선택'),
+            DropdownButtonFormField<String>(
+              initialValue: '',
+              items: const [
+                DropdownMenuItem(
+                  value: '',
+                  child: LText('쿠폰 API 연결 후 사용할 수 있습니다.'),
+                ),
+              ],
+              onChanged: null,
+            ),
+            const SizedBox(height: 12),
+            const LText('적립금 사용'),
+            const TextField(
+              enabled: false,
+              decoration: InputDecoration(
+                hintText: '적립금 API 연결 후 사용할 수 있습니다.',
+              ),
+            ),
+
+            const Divider(height: 30),
+            _amount('상품 금액', subtotal),
+            _amount('최종 결제', subtotal, bold: true),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: agreed,
+              onChanged: checkoutVm.submitting
+                  ? null
+                  : (value) => setState(() => agreed = value ?? false),
+              title: const LText(
+                '필수 · 개인정보 수집 및 구매 조건에 동의합니다.',
+              ),
+            ),
+            if (checkoutVm.error != null) ...[
+              LText(
+                checkoutVm.error!,
+                style: const TextStyle(color: Colors.red),
+              ),
+              const SizedBox(height: 12),
+            ],
+            FilledButton(
+              onPressed: checkoutVm.submitting || !agreed
+                  ? null
+                  : _pay,
+              child: LText(
+                checkoutVm.submitting
+                    ? '처리 중...'
+                    : '${won(subtotal)} 모의 결제',
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _amount(
+    String label,
+    int value, {
+    bool bold = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          LText(label),
+          const Spacer(),
+          LText(
+            won(value),
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _success() {
+    return ListView(
+      padding: const EdgeInsets.all(24),
       children: [
-        LText(label),
-        const Spacer(),
-        LText(
-          value < 0 ? '-${won(-value)}' : won(value),
-          style: TextStyle(
-            fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+        const Icon(
+          Icons.check_circle,
+          size: 60,
+          color: brandBlue,
+        ),
+        const Center(
+          child: SectionTitle('모의 결제가 완료되었습니다'),
+        ),
+        const Center(child: LText('감사합니다')),
+        const SizedBox(height: 20),
+        Center(
+          child: LText('주문번호 ${checkoutVm.orderNumber ?? ''}'),
+        ),
+        Center(
+          child: LText(
+            '주문 상품 ${widget.lines.fold(0, (sum, item) => sum + item.quantity)}개'
+            ' · 결제 금액 ${won(checkoutVm.paidTotal ?? subtotal)}',
           ),
         ),
-      ],
-    ),
-  );
-
-  Widget _success() => ListView(
-    padding: const EdgeInsets.all(24),
-    children: [
-      const Icon(Icons.check_circle, size: 60, color: brandBlue),
-      const Center(child: SectionTitle('주문이 완료되었습니다')),
-      const Center(child: LText('감사합니다')),
-      const SizedBox(height: 20),
-      Center(child: LText('주문번호 ${created!.number}')),
-      Center(
-        child: LText(
-          '주문 상품 ${widget.lines.fold(0, (sum, item) => sum + item.quantity)}개 · 결제 금액 ${won(total)}',
+        const SizedBox(height: 14),
+        const Center(child: LText('결제 상태: PAID')),
+        const SizedBox(height: 24),
+        FilledButton(
+          onPressed: widget.onComplete,
+          child: const LText('주문 내역 보기'),
         ),
-      ),
-      const SizedBox(height: 14),
-      LText(
-        '사용 적립금 -${validPoints}P\n남은 적립금 ${32500 - validPoints}P\n구매 적립 예정 +${(total * .02).floor()}P',
-        textAlign: TextAlign.center,
-      ),
-      const SizedBox(height: 24),
-      FilledButton(
-        onPressed: widget.onComplete,
-        child: const LText('주문 내역 보기'),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
-/// 자치구에 따른 목업 대리점 운영 정보를 제공합니다.
 class PickupStoreInfo extends StatelessWidget {
   const PickupStoreInfo({
     super.key,
-    required this.district,
+    required this.branch,
     this.compact = false,
   });
-  final String district;
+
+  final PickupBranch branch;
   final bool compact;
+
   @override
   Widget build(BuildContext context) {
-    final index = pickupDistricts
-        .indexOf(district)
-        .clamp(0, pickupDistricts.length - 1);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -621,17 +647,13 @@ class PickupStoreInfo extends StatelessWidget {
           children: [
             if (!compact)
               LText(
-                'SOLE $district점',
-                style: const TextStyle(fontWeight: FontWeight.bold),
+                branch.name,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            LText(
-              '픽업 가능 시간 · 평일 ${index.isEven ? '10:00–20:00' : '10:30–20:00'}',
-            ),
-            LText(
-              '토·일요일 ${index % 3 == 0 ? '11:00–18:00' : '11:00–19:00'} · 공휴일 휴무',
-            ),
-            LText('대리점 연락처 · 02-0000-${1001 + index}'),
-            const LText('운영시간과 연락처는 목업용 예시입니다.'),
+            LText(branch.address),
+            LText('대리점 연락처 · ${branch.phone}'),
           ],
         ),
       ),
