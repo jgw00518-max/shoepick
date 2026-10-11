@@ -187,6 +187,9 @@ class _MyAppState extends State<MyApp> {
               dispatchRequest: !isPreview && authRepository is FirebaseStaffAuth
                   ? (authRepository as FirebaseStaffAuth).api.getResponse
                   : null,
+              dispatchSubmit: !isPreview && authRepository is FirebaseStaffAuth
+                  ? (authRepository as FirebaseStaffAuth).api.post
+                  : null,
               initialRole: allowedRoles.first,
               availableRoles: allowedRoles,
               employeeName: staff.name,

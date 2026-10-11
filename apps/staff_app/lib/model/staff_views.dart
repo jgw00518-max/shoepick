@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 enum StaffView {
+  inquiries,
   overview,
   manufacturers,
   inbound,
@@ -46,15 +47,16 @@ List<StaffMenu> menusForRole(String role) => switch (role) {
     StaffMenu(StaffView.returns, '반품', Icons.assignment_return_outlined),
   ],
   'hqStaff' => const [
+    StaffMenu(StaffView.inquiries, '고객 문의', Icons.question_answer_outlined),
     StaffMenu(StaffView.overview, '대시보드', Icons.dashboard_outlined),
     StaffMenu(StaffView.orders, '주문', Icons.receipt_long_outlined),
-    StaffMenu(StaffView.payments,'결제 확인', Icons.payments_outlined,),
+    StaffMenu(StaffView.payments, '결제 확인', Icons.payments_outlined),
     StaffMenu(StaffView.customers, '고객 관리', Icons.people_outline),
     StaffMenu(StaffView.returns, '반품 검수', Icons.assignment_return_outlined),
     StaffMenu(StaffView.shipping, '배송', Icons.local_shipping_outlined),
     StaffMenu(StaffView.inventory, '재고', Icons.warehouse_outlined),
     StaffMenu(StaffView.requests, '품의 작성', Icons.edit_note_outlined),
-    StaffMenu(StaffView.manufacturers, '제조사 관리', Icons.factory_outlined,),
+    StaffMenu(StaffView.manufacturers, '제조사 관리', Icons.factory_outlined),
     StaffMenu(StaffView.manufacturerOrders, '제조사 발주', Icons.factory_outlined),
   ],
   'teamLeader' => const [
@@ -83,6 +85,7 @@ String viewTitle(
   required bool isBranch,
   required String role,
 }) => switch (view) {
+  StaffView.inquiries => '고객 문의',
   StaffView.payments => '결제 확인',
   StaffView.products => '상품 관리',
   StaffView.overview => role == 'executive' ? '판매·재고 현황' : '대시보드',
@@ -108,6 +111,7 @@ String viewDescription(
   required String role,
 }) => switch (view) {
   StaffView.payments => '전체 지점의 결제 기록과 금액·결제 상태를 확인하세요.',
+  StaffView.inquiries => '전체 고객 문의를 조회하고 첫 답변을 등록합니다.',
   StaffView.products => '상품 정보와 가격·판매 상태를 확인하세요.',
   StaffView.manufacturers => '등록된 제조사와 연락처를 확인하세요.',
   StaffView.overview => switch (role) {

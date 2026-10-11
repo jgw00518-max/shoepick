@@ -693,6 +693,7 @@ class _StaffPageState extends State<StaffPage> {
 
   @override
   Widget build(BuildContext context) => switch (widget.view) {
+    StaffView.inquiries => const SizedBox.shrink(),
     StaffView.payments => const SizedBox.shrink(),
     StaffView.products => const SizedBox.shrink(),
     StaffView.manufacturers => const SizedBox.shrink(),

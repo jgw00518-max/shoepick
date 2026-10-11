@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../model/order_history.dart';
+import '../model/order_after_sales.dart';
+import 'order_history_detail.dart';
+import '../vm/order_history_detail_vm.dart';
 import '../vm/auth_api.dart';
 import '../vm/order_history_vm.dart';
 
 /// 기존 주문 내역 진입점에서 인증된 고객의 조회 결과를 표시한다.
 class OrderHistoryView extends StatefulWidget {
-  const OrderHistoryView({super.key});
+  const OrderHistoryView({super.key, this.api});
+  final AuthApi? api;
   @override
   State<OrderHistoryView> createState() => _OrderHistoryViewState();
 }
@@ -15,16 +19,18 @@ class _OrderHistoryViewState extends State<OrderHistoryView> {
   late final String _tag;
   late final OrderHistoryVm _vm;
   bool _opening = false;
+  OrderHistoryDetailVm? _detailVm;
 
   @override
   void initState() {
     super.initState();
     _tag = 'order-history-${identityHashCode(this)}';
-    _vm = Get.put(OrderHistoryVm(api: AuthApi()), tag: _tag);
+    _vm = Get.put(OrderHistoryVm(api: widget.api ?? AuthApi()), tag: _tag);
   }
 
   @override
   void dispose() {
+    if (_detailVm != null && !_detailVm!.isClosed) _detailVm!.onDelete();
     Get.delete<OrderHistoryVm>(tag: _tag);
     super.dispose();
   }
@@ -66,7 +72,7 @@ class _OrderHistoryViewState extends State<OrderHistoryView> {
               child: ListTile(
                 title: Text(order.number),
                 subtitle: Text(
-                  '${order.status} · ${order.branch}\n${order.paidTotal}원',
+                  '${order.statusLabel} · ${order.branch}\n${order.paidTotal}원',
                 ),
                 isThreeLine: true,
                 trailing: const Icon(Icons.chevron_right),
@@ -97,47 +103,58 @@ class _OrderHistoryViewState extends State<OrderHistoryView> {
   );
 
   Future<void> _openDetail(OrderHistory order) async {
+    if (_opening) return;
     setState(() => _opening = true);
+    final detailVm = OrderHistoryDetailVm(
+      () => _vm.fetchDetail(order.id),
+      cancelOrder: (body) async {
+        final response = await _vm.api.post(
+          '/api/v1/order-history/customer/${order.id}/cancel-mock',
+          body,
+        );
+        final data = response['data'] as Map?;
+        if (data?['order_id'] != order.id ||
+            data?['completed'] != true ||
+            data?['is_mock'] != true ||
+            data?['order_status'] != 'CANCELED') {
+          throw StateError('Invalid mock cancel response');
+        }
+      },
+      createReturn: (body) async {
+        final response = await _vm.api.post(
+          '/api/v1/order-history/customer/${order.id}/returns',
+          body,
+        );
+        if ((response['data'] as Map?)?['return_request_id'] is! int) {
+          throw StateError('Invalid return response');
+        }
+      },
+      loadAfterSales: () async => OrderAfterSales.fromJson(
+        await _vm.api.get(
+          '/api/v1/order-history/customer/${order.id}/after-sales',
+        ),
+      ),
+      confirmPurchase: () async {
+        await _vm.api.post(
+          '/api/v1/order-history/customer/${order.id}/purchase-confirmation',
+          {},
+        );
+        if (!_vm.isClosed) await _vm.fetchOrders(targetPage: _vm.page);
+      },
+    );
+    _detailVm = detailVm;
     try {
-      final detail = await _vm.fetchDetail(order.id);
-      if (!mounted) return;
       await showDialog<void>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: Text(detail.number),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('상태: ${detail.status}'),
-                Text('수령: ${detail.branch}'),
-                for (final item in detail.items)
-                  Text(
-                    '${item['product_name']} · ${item['color_name']} · ${item['size_mm']}\n${item['quantity']}개 / ${item['line_total']}원',
-                  ),
-                Text('결제 금액: ${detail.paidTotal}원'),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('확인'),
-            ),
-          ],
-        ),
+        builder: (_) => OrderHistoryDetail(number: order.number, vm: detailVm),
       );
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('상세 조회에 실패했습니다. 다시 선택해주세요.')),
-        );
-      }
     } finally {
-      if (mounted) {
-        setState(() => _opening = false);
+      if (!detailVm.isClosed) detailVm.onDelete();
+      if (detailVm.cancelSubmitted && !_vm.isClosed) {
+        await _vm.fetchOrders(targetPage: _vm.page);
       }
+      _detailVm = null;
+      if (mounted) setState(() => _opening = false);
     }
   }
 }

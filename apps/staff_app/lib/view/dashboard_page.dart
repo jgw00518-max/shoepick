@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../vm/purchase_requisition_api.dart';
 import '../vm/dashboard_api.dart';
 import 'dispatch_view.dart';
+import 'staff_inquiry_view.dart';
+import 'pickup_candidates_view.dart';
+import 'staff_return_view.dart';
 import 'package:shoepick_staff_app/model/staff_role.dart';
 import 'package:shoepick_staff_app/model/staff_views.dart';
 import 'package:shoepick_staff_app/view/staff_overview.dart';
@@ -33,6 +36,7 @@ class DashboardPage extends StatefulWidget {
     this.orderRepository,
     this.workApi,
     this.dispatchRequest,
+    this.dispatchSubmit,
     this.purchaseRequisitionApi,
   });
 
@@ -48,6 +52,8 @@ class DashboardPage extends StatefulWidget {
   final StaffWorkApi? workApi;
   final PurchaseRequisitionApi? purchaseRequisitionApi;
   final Future<Map<String, dynamic>> Function(String)? dispatchRequest;
+  final Future<Map<String, dynamic>> Function(String, Map<String, dynamic>)?
+  dispatchSubmit;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -156,6 +162,11 @@ class _DashboardPageState extends State<DashboardPage> {
                                             ),
                                       onOpenView: _selectView,
                                     )
+                                  else if (selectedView == StaffView.inquiries)
+                                    StaffInquiryView(
+                                      key: ValueKey('${role.name}-inquiries'),
+                                      read: widget.dispatchRequest,
+                                    )
                                   else if (selectedView ==
                                       StaffView.manufacturers)
                                     const ManufacturerView()
@@ -170,6 +181,37 @@ class _DashboardPageState extends State<DashboardPage> {
                                         '${role.name}-dispatch-${widget.selectedBranchId}',
                                       ),
                                       request: widget.dispatchRequest!,
+                                      submit: role == StaffRole.hqStaff
+                                          ? widget.dispatchSubmit
+                                          : null,
+                                      branchId: role.isBranch
+                                          ? widget.selectedBranchId
+                                          : null,
+                                    )
+                                  else if (selectedView == StaffView.returns &&
+                                      widget.dispatchRequest != null)
+                                    StaffReturnView(
+                                      key: ValueKey(
+                                        '${role.name}-returns-${widget.selectedBranchId}',
+                                      ),
+                                      read: widget.dispatchRequest!,
+                                      branchId: role.isBranch
+                                          ? widget.selectedBranchId
+                                          : null,
+                                    )
+                                  else if ((selectedView == StaffView.inbound ||
+                                          selectedView == StaffView.pickup) &&
+                                      widget.dispatchRequest != null)
+                                    PickupCandidatesView(
+                                      key: ValueKey(
+                                        '${role.name}-${selectedView.name}-${widget.selectedBranchId}',
+                                      ),
+                                      read: widget.dispatchRequest!,
+                                      arrival:
+                                          selectedView == StaffView.inbound,
+                                      submit: role.isBranch
+                                          ? widget.dispatchSubmit
+                                          : null,
                                       branchId: role.isBranch
                                           ? widget.selectedBranchId
                                           : null,

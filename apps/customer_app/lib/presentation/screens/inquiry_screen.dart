@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import '../../vm/auth_api.dart';
+import '../../vm/inquiry_create_vm.dart';
 import '../localization.dart';
+import '../../view/inquiry_history_view.dart';
+import '../../model/inquiry_input.dart';
 
 import '../../app/store_controller.dart';
 import '../../domain/models.dart';
@@ -43,15 +48,23 @@ class _InquiryScreenState extends State<InquiryScreen> {
   final title = TextEditingController();
   final body = TextEditingController();
   late String kind;
+  late final InquiryCreateVm _createVm;
+  int _listVersion = 0;
   @override
   void initState() {
     super.initState();
+    _createVm = InquiryCreateVm(
+      send: (data) =>
+          AuthApi().post('/api/v1/order-history/inquiries/customer', data),
+    );
+    _createVm.onStart();
     kind = widget.product == null ? '배송 문의' : '상품 문의';
     if (widget.product != null) title.text = '${widget.product!.name} 상품 문의';
   }
 
   @override
   void dispose() {
+    _createVm.onDelete();
     title.dispose();
     body.dispose();
     super.dispose();
@@ -59,134 +72,118 @@ class _InquiryScreenState extends State<InquiryScreen> {
 
   Future<void> _submit() async {
     if (!formKey.currentState!.validate()) return;
-    await widget.store.addInquiry(kind, title.text.trim(), body.text.trim());
+    final codes = {
+      '상품 문의': 'PRODUCT',
+      '배송 문의': 'DELIVERY',
+      '결제 문의': 'PAYMENT',
+      '기타 문의': 'OTHER',
+    };
+    final saved = await _createVm.submit({
+      'inquiry_type': codes[kind],
+      'title': title.text.trim(),
+      'inquiry_content': body.text.trim(),
+      'product_id': widget.product?.id,
+    });
+    if (!mounted) return;
+    if (!saved) {
+      widget.onMessage(_createVm.error ?? '문의 저장을 확인하지 못했습니다.');
+      return;
+    }
     title.clear();
     body.clear();
-    widget.onMessage('문의가 접수되었습니다. 답변 등록 시 알려드릴게요.');
+    setState(() => _listVersion++);
+    widget.onMessage('문의가 접수되었습니다.');
   }
 
-  void _openEntry(InquiryEntry entry) => showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: LText(entry.title),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          LText(
-            '${entry.answered ? '답변 완료' : '답변 대기'} · ${entry.date} · ${entry.kind}',
-          ),
-          const SizedBox(height: 12),
-          LText('Q  ${entry.body}'),
-          const SizedBox(height: 12),
-          LText(
-            'A  ${entry.answer ?? '담당자가 문의 내용을 확인하고 있습니다. 답변이 등록되면 알림으로 알려드릴게요.'}',
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const LText('닫기'),
+  @override
+  Widget build(BuildContext context) => GetBuilder<InquiryCreateVm>(
+    init: _createVm,
+    global: false,
+    autoRemove: false,
+    builder: (vm) => ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        const SectionTitle('문의 사항'),
+        LText(
+          widget.product == null
+              ? '궁금한 점을 남기면 빠르게 답변해드려요.'
+              : '${widget.product!.name}에 대해 문의해보세요.',
         ),
+        const SizedBox(height: 18),
+        const SectionTitle('자주 묻는 질문'),
+        for (final faq in faqItems)
+          ExpansionTile(
+            title: LText(faq.$1),
+            children: [
+              Padding(padding: const EdgeInsets.all(14), child: LText(faq.$2)),
+            ],
+          ),
+        const SizedBox(height: 20),
+        Form(
+          key: formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('문의 작성 목업 (서버 저장 안 됨)'),
+              const SectionTitle('1:1 문의'),
+              DropdownButtonFormField<String>(
+                initialValue: kind,
+                decoration: const InputDecoration(
+                  labelText: '문의 유형',
+                  border: OutlineInputBorder(),
+                ),
+                items: ['상품 문의', '배송 문의', '결제 문의', '기타 문의']
+                    .map(
+                      (value) =>
+                          DropdownMenuItem(value: value, child: LText(value)),
+                    )
+                    .toList(),
+                onChanged: (value) => setState(() => kind = value!),
+              ),
+              if (widget.product != null)
+                ListTile(
+                  leading: SizedBox(
+                    width: 56,
+                    child: ProductImage(widget.product!, height: 56),
+                  ),
+                  title: LText(widget.product!.name),
+                  subtitle: const LText('문의 상품'),
+                ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: title,
+                decoration: const InputDecoration(
+                  labelText: '제목',
+                  hintText: '문의 제목을 입력하세요',
+                  border: OutlineInputBorder(),
+                ),
+                validator: validateInquiryTitle,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: body,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: '내용',
+                  hintText: '문의 내용을 자세히 입력해주세요',
+                  border: OutlineInputBorder(),
+                ),
+                validator: validateInquiryContent,
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: vm.saving ? null : _submit,
+                  child: const LText('문의 접수'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        InquiryHistoryView(key: ValueKey(_listVersion)),
       ],
     ),
-  );
-
-  @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(20),
-    children: [
-      const SectionTitle('문의 사항'),
-      LText(
-        widget.product == null
-            ? '궁금한 점을 남기면 빠르게 답변해드려요.'
-            : '${widget.product!.name}에 대해 문의해보세요.',
-      ),
-      const SizedBox(height: 18),
-      const SectionTitle('자주 묻는 질문'),
-      for (final faq in faqItems)
-        ExpansionTile(
-          title: LText(faq.$1),
-          children: [
-            Padding(padding: const EdgeInsets.all(14), child: LText(faq.$2)),
-          ],
-        ),
-      const SizedBox(height: 20),
-      Form(
-        key: formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SectionTitle('1:1 문의'),
-            DropdownButtonFormField<String>(
-              initialValue: kind,
-              decoration: const InputDecoration(
-                labelText: '문의 유형',
-                border: OutlineInputBorder(),
-              ),
-              items: ['상품 문의', '배송 문의', '결제 문의', '기타 문의']
-                  .map(
-                    (value) =>
-                        DropdownMenuItem(value: value, child: LText(value)),
-                  )
-                  .toList(),
-              onChanged: (value) => setState(() => kind = value!),
-            ),
-            if (widget.product != null)
-              ListTile(
-                leading: SizedBox(
-                  width: 56,
-                  child: ProductImage(widget.product!, height: 56),
-                ),
-                title: LText(widget.product!.name),
-                subtitle: const LText('문의 상품'),
-              ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: title,
-              decoration: const InputDecoration(
-                labelText: '제목',
-                hintText: '문의 제목을 입력하세요',
-                border: OutlineInputBorder(),
-              ),
-              validator: (value) =>
-                  (value?.trim().isEmpty ?? true) ? '문의 제목을 입력해주세요.' : null,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: body,
-              maxLines: 5,
-              decoration: const InputDecoration(
-                labelText: '내용',
-                hintText: '문의 내용을 자세히 입력해주세요',
-                border: OutlineInputBorder(),
-              ),
-              validator: (value) =>
-                  (value?.trim().isEmpty ?? true) ? '문의 내용을 입력해주세요.' : null,
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _submit,
-                child: const LText('문의 접수'),
-              ),
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 24),
-      SectionTitle('문의 목록 · ${widget.store.inquiries.length}건'),
-      for (final entry in widget.store.inquiries)
-        ListTile(
-          title: LText(entry.title),
-          subtitle: LText(
-            '${entry.answered ? '답변 완료' : '답변 대기'} · ${entry.date} · ${entry.kind}',
-          ),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _openEntry(entry),
-        ),
-    ],
   );
 }
