@@ -8,6 +8,9 @@ from pymysql import MySQLError
 if __package__:
     from .features import (
         authentication,
+        manufacturers,
+        staff_products,
+        staff_payments,
         dashboard,
         goods_receipts,
         inventory,
@@ -22,6 +25,9 @@ if __package__:
 else:
     from features import (
         authentication,
+        manufacturers,
+        staff_products,
+        staff_payments,
         dashboard,
         goods_receipts,
         inventory,
@@ -77,6 +83,9 @@ async def handle_business_error(request: Request, exc: HTTPException):
 # 기능별 파일에서 정의한 API를 공통 경로에 등록한다.
 for feature in (
     authentication,
+    manufacturers,
+    staff_products,
+    staff_payments,
     inventory,
     purchase_requisitions,
     purchase_approvals,
