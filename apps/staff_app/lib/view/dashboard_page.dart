@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../vm/purchase_requisition_api.dart';
+import '../vm/dashboard_api.dart';
 import 'dispatch_view.dart';
 import 'package:shoepick_staff_app/model/staff_role.dart';
 import 'package:shoepick_staff_app/model/staff_views.dart';
@@ -145,10 +146,18 @@ class _DashboardPageState extends State<DashboardPage> {
                                       selectedBranchId: widget.selectedBranchId,
                                       orderRepository: widget.orderRepository,
                                       workApi: widget.workApi,
+                                      dashboardApi:
+                                          widget.purchaseRequisitionApi == null
+                                          ? null
+                                          : DashboardApi(
+                                              widget
+                                                  .purchaseRequisitionApi!
+                                                  .api,
+                                            ),
                                       onOpenView: _selectView,
                                     )
-                                  else if (
-                                    selectedView == StaffView.manufacturers)
+                                  else if (selectedView ==
+                                      StaffView.manufacturers)
                                     const ManufacturerView()
                                   else if (selectedView == StaffView.products)
                                     const StaffProductView()

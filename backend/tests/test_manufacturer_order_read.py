@@ -99,3 +99,15 @@ def test_missing_and_unauthenticated(client):
     assert c.get('/api/v1/manufacturer-orders/10').status_code==404
     del app.dependency_overrides[current_employee]
     assert c.get('/api/v1/manufacturer-orders').status_code==401
+
+
+def test_persistent_receipt_projection_uses_audit_snapshot(client):
+    c,_,_,_,state=client
+    state['rows'][0]['goods_receipt_data']=json.dumps({'audit_log_id':20,'received_at':'2026-10-11 12:00:00',
+        'payload':{'order_audit_log_id':10,'total_received_quantity':100,
+        'items':[{'product_variant_id':12,'received_quantity':100,'on_hand_after':120}]}})
+    response=c.get('/api/v1/manufacturer-orders/10')
+    assert response.status_code==200,response.text
+    receipt=response.json()['data']['goods_receipt']
+    assert receipt['items'][0]['on_hand_after']==120
+    assert c.get('/api/v1/manufacturer-orders').json()['data'][0]['goods_receipt']==receipt
