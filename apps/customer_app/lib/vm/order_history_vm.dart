@@ -20,10 +20,12 @@ class OrderHistoryVm extends GetxController {
   }
 
   Future<void> fetchOrders({int targetPage = 1}) async {
+    if (isClosed || loading) return;
     final request = ++_request;
     loading = true;
     error = null;
     orders = [];
+    totalCount = 0;
     update();
     try {
       final response = await api.getResponse(

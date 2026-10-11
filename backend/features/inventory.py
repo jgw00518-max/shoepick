@@ -459,6 +459,191 @@ def reserve_order_inventory(
     return OrderReservationResult(order_id=order_id, changed=bool(missing), reservations=rows)
 
 
+def consume_order_inventory(db: Connection, *, order_id: int, employee_id: int) -> OrderReservationResult:
+    """본사 출고 시 전체 주문 예약과 실물 수량을 함께 소비한다. commit하지 않는다.
+
+    C는 검증된 직원의 출고 확인 후 동일 연결에서 호출하고 배송/주문 상태를
+    이어서 기록한다. 실패하면 최상위에서 전체 rollback해야 한다.
+    """
+    if type(employee_id) is not int or employee_id < 1:
+        _inventory_error('INVALID_INPUT', '처리 직원 ID를 확인해주세요.', 400)
+    with db.cursor(DictCursor) as cursor:
+        order = _lock_inventory_order(cursor, db, order_id)
+        with _inventory_savepoint(cursor):
+            if order['order_status'] not in ('PAID', 'SHIPPING'):
+                _inventory_error('INVALID_STATE_TRANSITION', '결제 완료 출고 주문만 소비할 수 있습니다.')
+            cursor.execute("SELECT payment_id FROM payments WHERE order_id=%s AND payment_status='PAID' LIMIT 1 FOR UPDATE", (order_id,))
+            if cursor.fetchone() is None:
+                _inventory_error('INVALID_STATE_TRANSITION', '결제 완료 기록이 필요합니다.')
+            cursor.execute('SELECT order_item_id, product_variant_id, quantity FROM order_items WHERE order_id=%s '
+                           'ORDER BY product_variant_id, order_item_id FOR UPDATE', (order_id,))
+            items = cursor.fetchall()
+            cursor.execute('SELECT inventory_reservation_id, order_id, order_item_id, product_variant_id, reserved_quantity, '
+                           'reservation_status, consumed_at FROM inventory_reservations WHERE order_id=%s '
+                           'ORDER BY product_variant_id, order_item_id FOR UPDATE', (order_id,))
+            reservations = cursor.fetchall()
+            if (not items or any(item['quantity'] < 1 for item in items) or
+                    [(i['order_item_id'],i['product_variant_id'],i['quantity']) for i in items] !=
+                    [(r['order_item_id'],r['product_variant_id'],r['reserved_quantity']) for r in reservations]):
+                _inventory_error('INVALID_STATE_TRANSITION', '주문 전체와 예약 수량이 일치해야 합니다.')
+            replayed = all(r['reservation_status'] == 'CONSUMED' and r['consumed_at'] is not None for r in reservations)
+            if replayed:
+                for row in reservations:
+                    cursor.execute("SELECT inventory_movement_id FROM inventory_movements WHERE idempotency_key=%s "
+                                   "AND reference_type='ORDER' AND reference_id=%s AND product_variant_id=%s "
+                                   'AND on_hand_delta=%s AND reserved_delta=%s FOR UPDATE',
+                                   (f"reservation:{row['inventory_reservation_id']}:consume",order_id,row['product_variant_id'],
+                                    -row['reserved_quantity'],-row['reserved_quantity']))
+                    if cursor.fetchone() is None:
+                        _inventory_error('INVALID_STATE_TRANSITION', '기존 소비 이력을 확인해주세요.')
+            else:
+                if (order['order_status'] != 'PAID' or any(r['reservation_status'] != 'RESERVED' or
+                        r['consumed_at'] is not None for r in reservations)):
+                    _inventory_error('INVALID_STATE_TRANSITION', '부분 소비 또는 해제된 예약은 출고할 수 없습니다.')
+                _check_before_shipment(cursor, order_id)
+                balances = _lock_inventory_balances(cursor, [i['product_variant_id'] for i in items])
+                totals = {}
+                for item in items:
+                    variant = item['product_variant_id']
+                    totals[variant] = totals.get(variant, 0) + item['quantity']
+                for variant, quantity in totals.items():
+                    balance = balances[variant]
+                    if (balance['reserved_quantity'] < quantity or
+                            balance['on_hand_quantity'] - balance['defective_quantity'] < quantity):
+                        _inventory_error('INSUFFICIENT_STOCK', '출고할 예약·정상 재고가 부족합니다.')
+                for row in reservations:
+                    variant, quantity = row['product_variant_id'], row['reserved_quantity']
+                    cursor.execute('UPDATE headquarters_inventory SET on_hand_quantity=on_hand_quantity-%s, '
+                                   'reserved_quantity=reserved_quantity-%s WHERE product_variant_id=%s', (quantity,quantity,variant))
+                    cursor.execute("UPDATE inventory_reservations SET reservation_status='CONSUMED', consumed_at=CURRENT_TIMESTAMP "
+                                   "WHERE inventory_reservation_id=%s AND reservation_status='RESERVED'", (row['inventory_reservation_id'],))
+                    if cursor.rowcount != 1:
+                        _inventory_error('INVALID_STATE_TRANSITION', '예약 상태가 변경되었습니다.')
+                    balance = balances[variant]
+                    balance['on_hand_quantity'] -= quantity
+                    balance['reserved_quantity'] -= quantity
+                    cursor.execute('INSERT INTO inventory_movements (product_variant_id,movement_type,on_hand_delta,reserved_delta,'
+                                   'defective_delta,on_hand_after,reserved_after,defective_after,reference_type,reference_id,'
+                                   'idempotency_key,reason,created_by_employee_id) '
+                                   "VALUES (%s,'SHIPMENT',%s,%s,0,%s,%s,%s,'ORDER',%s,%s,%s,%s)",
+                                   (variant,-quantity,-quantity,balance['on_hand_quantity'],balance['reserved_quantity'],
+                                    balance['defective_quantity'],order_id,f"reservation:{row['inventory_reservation_id']}:consume",
+                                    '고객 주문 출고',employee_id))
+            rows = _order_reservations(cursor, order_id, lock=True)
+    return OrderReservationResult(order_id=order_id, changed=not replayed, reservations=rows)
+
+
+def restore_return_inventory(db: Connection, *, order_id: int, return_request_id: int,
+                             employee_id: int, resale_confirmed: bool) -> dict:
+    """본사 회수·재판매 가능 확인 후 전체 반품의 정상 재고만 복원한다. commit하지 않는다."""
+    if any(type(x) is not int or x < 1 for x in (order_id, return_request_id, employee_id)) or resale_confirmed is not True:
+        _inventory_error('INVALID_INPUT', '실제 본사 회수와 재판매 가능 확인이 필요합니다.', 400)
+    with db.cursor(DictCursor) as cursor:
+        order = _lock_inventory_order(cursor, db, order_id)
+        if order['order_status'] != 'COMPLETED':
+            _inventory_error('INVALID_STATE_TRANSITION', '수령 완료 주문의 반품만 복원할 수 있습니다.')
+        cursor.execute('SELECT purchase_confirmed_at FROM orders WHERE order_id=%s', (order_id,))
+        if cursor.fetchone()['purchase_confirmed_at'] is not None:
+            _inventory_error('INVALID_STATE_TRANSITION', '구매확정한 주문은 반품할 수 없습니다.')
+        cursor.execute('SELECT order_id,request_status FROM return_requests WHERE return_request_id=%s FOR UPDATE', (return_request_id,))
+        request = cursor.fetchone()
+        if request is None or request['order_id'] != order_id or request['request_status'] != 'APPROVED':
+            _inventory_error('INVALID_STATE_TRANSITION', '승인된 반품 기록이 필요합니다.')
+        cursor.execute("SELECT inspection_decision,has_wear_marks,has_product_damage,has_customer_fault,components_complete,packaging_intact,has_product_defect,is_wrong_item "
+                       "FROM after_sales_inspections WHERE return_request_id=%s AND inspection_stage='HEADQUARTERS' FOR UPDATE", (return_request_id,))
+        inspection = cursor.fetchone()
+        if (inspection is None or inspection['inspection_decision'] != 'ACCEPTED'
+                or any(inspection[x] != 0 for x in ('has_wear_marks','has_product_damage','has_customer_fault','has_product_defect','is_wrong_item'))
+                or inspection['components_complete'] != 1 or inspection['packaging_intact'] != 1):
+            _inventory_error('INVALID_STATE_TRANSITION', '정상 재판매 가능한 본사 검수 기록이 필요합니다.')
+        cursor.execute('SELECT order_item_id,product_variant_id,quantity FROM order_items WHERE order_id=%s ORDER BY order_item_id FOR UPDATE', (order_id,))
+        items = cursor.fetchall()
+        cursor.execute('SELECT order_item_id,quantity FROM return_items WHERE return_request_id=%s ORDER BY order_item_id FOR UPDATE', (return_request_id,))
+        returned = cursor.fetchall()
+        if (not items or any(x['quantity'] < 1 for x in items)
+                or [(x['order_item_id'],x['quantity']) for x in items] != [(x['order_item_id'],x['quantity']) for x in returned]):
+            _inventory_error('INVALID_STATE_TRANSITION', '전체 주문 반품 수량이 일치해야 합니다.')
+        totals = {}
+        for item in items:
+            totals[item['product_variant_id']] = totals.get(item['product_variant_id'],0) + item['quantity']
+        with _inventory_savepoint(cursor):
+            balances = _lock_inventory_balances(cursor, totals)
+            movements = []
+            for variant, quantity in sorted(totals.items()):
+                key = f'return:{return_request_id}:restore:{variant}'
+                cursor.execute('SELECT product_variant_id,on_hand_delta,reserved_delta,defective_delta,reference_type,reference_id '
+                               'FROM inventory_movements WHERE idempotency_key=%s FOR UPDATE', (key,))
+                movements.append((variant,quantity,key,cursor.fetchone()))
+            existing = [row[3] is not None for row in movements]
+            if any(existing) and not all(existing):
+                _inventory_error('INVALID_STATE_TRANSITION', '부분 복원 기록은 자동 재처리하지 않습니다.')
+            for variant,quantity,key,prior in movements:
+                if prior is not None:
+                    if (prior['product_variant_id'] != variant or prior['on_hand_delta'] != quantity
+                            or prior['reserved_delta'] != 0 or prior['defective_delta'] != 0
+                            or prior['reference_type'] != 'RETURN' or prior['reference_id'] != return_request_id):
+                        _inventory_error('ALREADY_PROCESSED', '기존 반품 복원 기록이 일치하지 않습니다.')
+                    continue
+                balance = balances[variant]
+                cursor.execute('UPDATE headquarters_inventory SET on_hand_quantity=on_hand_quantity+%s WHERE product_variant_id=%s', (quantity,variant))
+                cursor.execute("INSERT INTO inventory_movements (product_variant_id,movement_type,on_hand_delta,reserved_delta,defective_delta,on_hand_after,reserved_after,defective_after,reference_type,reference_id,idempotency_key,reason,created_by_employee_id) "
+                               "VALUES (%s,'RETURN',%s,0,0,%s,%s,%s,'RETURN',%s,%s,%s,%s)",
+                               (variant,quantity,balance['on_hand_quantity']+quantity,balance['reserved_quantity'],balance['defective_quantity'],return_request_id,key,'본사 회수 및 정상 재판매 확인',employee_id))
+    return {'order_id':order_id,'return_request_id':return_request_id,'changed':not all(existing)}
+
+
+def prepare_pickup_holdings(db: Connection, *, order_id: int, fulfillment_id: int, branch_id: int) -> dict:
+    """검수된 전체 배송을 고객 주문 보관으로 기록한다. 판매 재고는 다시 증가시키지 않는다.
+
+    인증·최종 commit은 C 호출자 책임이다. 주문→배송→항목→보관 순서로 잠근다.
+    """
+    if any(isinstance(x, bool) or not isinstance(x, int) or x < 1 for x in (order_id, fulfillment_id, branch_id)):
+        _inventory_error('INVALID_INPUT', '보관 처리 정보를 확인해주세요.', 400)
+    with db.cursor(DictCursor) as cursor:
+        order = _lock_inventory_order(cursor, db, order_id)
+        if order['order_status'] != 'SHIPPING':
+            _inventory_error('INVALID_STATE_TRANSITION', '배송 중인 주문만 보관 준비할 수 있습니다.')
+        cursor.execute('SELECT order_id,destination_branch_id,fulfillment_status,shipped_at,arrived_at,inspected_at,completed_at '
+                       'FROM fulfillments WHERE fulfillment_id=%s FOR UPDATE', (fulfillment_id,))
+        delivery = cursor.fetchone()
+        if (delivery is None or delivery['order_id'] != order_id or delivery['destination_branch_id'] != branch_id
+                or delivery['fulfillment_status'] != 'INSPECTING' or delivery['completed_at'] is not None
+                or any(delivery[x] is None for x in ('shipped_at','arrived_at','inspected_at'))):
+            _inventory_error('INVALID_STATE_TRANSITION', '정상 검수된 배송이 필요합니다.')
+        cursor.execute('SELECT pickup_branch_id FROM orders WHERE order_id=%s', (order_id,))
+        if cursor.fetchone()['pickup_branch_id'] != branch_id:
+            _inventory_error('INVALID_STATE_TRANSITION', '수령 대리점이 일치하지 않습니다.')
+        cursor.execute('SELECT order_item_id,quantity FROM order_items WHERE order_id=%s ORDER BY order_item_id FOR UPDATE', (order_id,))
+        items = cursor.fetchall()
+        cursor.execute('SELECT fulfillment_item_id,order_id,order_item_id,quantity FROM fulfillment_items WHERE fulfillment_id=%s ORDER BY order_item_id FOR UPDATE', (fulfillment_id,))
+        shipped = cursor.fetchall()
+        if (not items or len(items) != len(shipped) or any(x['order_id'] != order_id for x in shipped)
+                or any(x['quantity'] <= 0 for x in items)
+                or [(x['order_item_id'],x['quantity']) for x in items] != [(x['order_item_id'],x['quantity']) for x in shipped]):
+            _inventory_error('INVALID_STATE_TRANSITION', '전체 배송 수량이 일치해야 합니다.')
+        changed = False
+        with _inventory_savepoint(cursor):
+            for item in sorted(shipped, key=lambda x: x['fulfillment_item_id']):
+                cursor.execute('SELECT branch_id,quantity,holding_status,received_at,ready_at,picked_up_at FROM pickup_holdings WHERE fulfillment_item_id=%s FOR UPDATE', (item['fulfillment_item_id'],))
+                holding = cursor.fetchone()
+                if holding is None:
+                    cursor.execute("INSERT INTO pickup_holdings (fulfillment_item_id,branch_id,quantity,holding_status,received_at,ready_at) VALUES (%s,%s,%s,'READY_FOR_PICKUP',%s,CURRENT_TIMESTAMP)",
+                                   (item['fulfillment_item_id'],branch_id,item['quantity'],delivery['arrived_at']))
+                    changed = True
+                else:
+                    if (holding['branch_id'] != branch_id or holding['quantity'] != item['quantity'] or holding['picked_up_at'] is not None
+                            or holding['holding_status'] not in ('AWAITING_ARRIVAL','INSPECTING','READY_FOR_PICKUP')):
+                        _inventory_error('INVALID_STATE_TRANSITION', '기존 보관 기록을 확인해주세요.')
+                    if holding['holding_status'] == 'READY_FOR_PICKUP':
+                        if holding['received_at'] is None or holding['ready_at'] is None:
+                            _inventory_error('INVALID_STATE_TRANSITION', '보관 준비 시각이 누락되었습니다.')
+                        continue
+                    cursor.execute("UPDATE pickup_holdings SET holding_status='READY_FOR_PICKUP',received_at=COALESCE(received_at,%s),ready_at=CURRENT_TIMESTAMP WHERE fulfillment_item_id=%s",
+                                   (delivery['arrived_at'],item['fulfillment_item_id']))
+                    changed = True
+    return {'order_id':order_id,'fulfillment_id':fulfillment_id,'changed':changed}
+
+
 def release_order_inventory(
     db: Connection, *, order_id: int, reason: str,
 ) -> OrderReservationResult:
