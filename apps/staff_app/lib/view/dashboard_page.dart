@@ -6,6 +6,9 @@ import 'package:shoepick_staff_app/view/staff_overview.dart';
 import 'package:shoepick_staff_app/view/staff_pages.dart';
 import 'package:shoepick_staff_app/vm/staff_order_api.dart';
 import 'package:shoepick_staff_app/vm/staff_work_api.dart';
+import 'manufacturer_view.dart';
+import 'staff_product_view.dart';
+import 'staff_payments_view.dart';
 
 const _navy = Color(0xFF19324F);
 const _blue = Color(0xFF2563C6);
@@ -141,6 +144,13 @@ class _DashboardPageState extends State<DashboardPage> {
                                       workApi: widget.workApi,
                                       onOpenView: _selectView,
                                     )
+                                  else if (
+                                    selectedView == StaffView.manufacturers)
+                                    const ManufacturerView()
+                                  else if (selectedView == StaffView.products)
+                                    const StaffProductView()
+                                  else if (selectedView == StaffView.payments)
+                                    const StaffPaymentsView()
                                   else if (selectedView == StaffView.shipping &&
                                       widget.dispatchRequest != null)
                                     DispatchView(
