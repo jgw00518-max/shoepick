@@ -4,6 +4,7 @@ import '../model/purchase_requisition.dart';
 import '../model/staff_session.dart';
 import '../vm/manufacturer_order_api.dart';
 import 'list_order_dropdown.dart';
+import 'manufacturer_reception_dialog.dart';
 
 class ManufacturerOrderList extends StatefulWidget {
   const ManufacturerOrderList({super.key, required this.api});
@@ -60,13 +61,18 @@ class _ManufacturerOrderListState extends State<ManufacturerOrderList> {
   }
 
   String date(dynamic value) => '$value'.replaceAll('T', ' ');
+  String receptionLabel(dynamic status) => switch (status) {
+    'ACCEPTED' => '접수 확인',
+    'REJECTED' => '접수 거절',
+    _ => '확인 대기',
+  };
   Future<void> detail(int id) async {
     if (detailLoading != null) return;
     setState(() => detailLoading = id);
     try {
       final data = await widget.api.detail(id);
       if (!mounted) return;
-      await showDialog<void>(
+      final changed = await showDialog<Map<String, dynamic>>(
         context: context,
         builder: (context) => AlertDialog(
           title: Text('${data['order_number']} · ${data['title']}'),
@@ -86,6 +92,28 @@ class _ManufacturerOrderListState extends State<ManufacturerOrderList> {
                     '발주 등록: ${data['registered_by_name'] ?? '—'} · ${date(data['registered_at'])}',
                   ),
                   const Text('전달 상태: 외부 전송 전'),
+                  Text('제조사 접수: ${receptionLabel(data['reception_status'])}'),
+                  Text(
+                    data['goods_receipt'] == null
+                        ? '입고: 입고 기록 없음'
+                        : '입고 완료: ${data['goods_receipt']['total_received_quantity']}켤레 · ${date(data['goods_receipt']['received_at'])}',
+                  ),
+                  if (data['goods_receipt'] != null)
+                    for (final received
+                        in data['goods_receipt']['items'] as List<dynamic>)
+                      Text(
+                        '옵션 #${received['product_variant_id']}: 입고 ${received['received_quantity']}켤레 · 입고 처리 후 본사 실물 재고 ${received['on_hand_after']}켤레',
+                      ),
+                  if (data['reception'] != null) ...[
+                    Text(
+                      '확인 직원: ${data['reception']['recorded_by_name'] ?? '—'} · ${date(data['reception']['recorded_at'])}',
+                    ),
+                    Text(
+                      '확인 방법: ${const {'PHONE': '전화', 'EMAIL': '이메일', 'OTHER': '기타'}[data['reception']['confirmation_method']]}',
+                    ),
+                    if (data['reception']['comment'] != '')
+                      Text('메모·사유: ${data['reception']['comment']}'),
+                  ],
                   const SizedBox(height: 12),
                   Text('구매 사유: ${data['reason']}'),
                   const Divider(),
@@ -109,6 +137,26 @@ class _ManufacturerOrderListState extends State<ManufacturerOrderList> {
             ),
           ),
           actions: [
+            if (data['can_record_reception'] == true)
+              for (final accept in [false, true])
+                FilledButton(
+                  onPressed: () async {
+                    final saved = await showDialog<Map<String, dynamic>>(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (_) => ManufacturerReceptionDialog(
+                        api: widget.api,
+                        id: id,
+                        accept: accept,
+                        quantity: data['total_requested_quantity'] as int,
+                      ),
+                    );
+                    if (saved != null && context.mounted) {
+                      Navigator.pop(context, saved);
+                    }
+                  },
+                  child: Text(accept ? '접수 확인 및 전체 입고' : '접수 거절'),
+                ),
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('닫기'),
@@ -116,6 +164,20 @@ class _ManufacturerOrderListState extends State<ManufacturerOrderList> {
           ],
         ),
       );
+      if (changed != null && mounted) {
+        await refresh();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                changed['goods_receipt'] == null
+                    ? '제조사 접수 결과를 기록했습니다.'
+                    : '접수 확인 및 전체 입고 완료: ${changed['goods_receipt']['total_received_quantity']}켤레가 본사 재고에 반영되었습니다.',
+              ),
+            ),
+          );
+        }
+      }
     } on StaffAuthException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -203,6 +265,12 @@ class _ManufacturerOrderListState extends State<ManufacturerOrderList> {
                   '등록일: ${date(row['registered_at'])} · ${row['registered_by_name'] ?? '—'}',
                 ),
                 const Text('전달 상태: 외부 전송 전'),
+                Text('제조사 접수: ${receptionLabel(row['reception_status'])}'),
+                Text(
+                  row['goods_receipt'] == null
+                      ? '입고: 입고 기록 없음'
+                      : '입고 완료: ${row['goods_receipt']['total_received_quantity']}켤레',
+                ),
                 TextButton(
                   key: ValueKey(
                     'manufacturer-order-detail-${row['audit_log_id']}',

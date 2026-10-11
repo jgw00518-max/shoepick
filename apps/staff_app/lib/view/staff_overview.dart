@@ -5,6 +5,7 @@ import 'package:shoepick_staff_app/model/staff_views.dart';
 import 'package:shoepick_staff_app/vm/staff_order_api.dart';
 import 'package:shoepick_staff_app/vm/staff_overview_vm.dart';
 import 'package:shoepick_staff_app/vm/staff_work_api.dart';
+import '../vm/dashboard_api.dart';
 
 const _blue = Color(0xFF2563C6);
 const _ink = Color(0xFF1B2B40);
@@ -20,6 +21,7 @@ class StaffOverview extends StatefulWidget {
     required this.onOpenView,
     this.orderRepository,
     this.workApi,
+    this.dashboardApi,
   });
 
   final String roleKey;
@@ -27,6 +29,7 @@ class StaffOverview extends StatefulWidget {
   final ValueChanged<StaffView> onOpenView;
   final StaffOrderRepository? orderRepository;
   final StaffWorkApi? workApi;
+  final DashboardApi? dashboardApi;
 
   @override
   State<StaffOverview> createState() => _StaffOverviewState();
@@ -57,10 +60,86 @@ class _StaffOverviewState extends State<StaffOverview> {
     }
   }
 
-  Future<OverviewSnapshot> _fetch() => StaffOverviewVm(
-    orders: _orders,
-    work: _work,
-  ).fetch(roleKey: widget.roleKey, selectedBranchId: widget.selectedBranchId);
+  Future<OverviewSnapshot> _fetch() async {
+    if (widget.dashboardApi != null &&
+        {'branchStaff', 'branchManager'}.contains(widget.roleKey)) {
+      final branchId = widget.selectedBranchId;
+      if (branchId == null) throw const StaffAuthException('조회할 대리점을 선택해주세요.');
+      final data = await widget.dashboardApi!.branchInventory(branchId);
+      return OverviewSnapshot([
+        for (final label in ['입고 확인 대기', '고객 수령 대기', '반품 요청'])
+          OverviewMetric(label, '—', 'API 연결 예정'),
+        OverviewMetric(
+          '현재 보관 수량',
+          '${data['held_quantity']}켤레',
+          '${data['branch_name']} · 실제 보관 수량',
+        ),
+      ], const []);
+    }
+    if (widget.dashboardApi != null) {
+      final data = await widget.dashboardApi!.headquartersLowStock();
+      final count = data['low_stock_variant_count'] as int;
+      List<OverviewMetric>? salesMetrics;
+      final warnings = <String>[];
+      if (widget.roleKey == 'executive') {
+        try {
+          final sales = await widget.dashboardApi!.executiveSales();
+          final amount = '${sales['revenue_amount']}'.replaceAllMapped(
+            RegExp(r'\B(?=(\d{3})+(?!\d))'),
+            (_) => ',',
+          );
+          salesMetrics = [
+            OverviewMetric(
+              '최근 28일 판매량',
+              '${sales['sales_quantity']}켤레',
+              '결제 완료 주문 품목 수량',
+            ),
+            OverviewMetric('최근 28일 매출', '₩$amount', '주문 결제액 · 부분 환불 차감 전'),
+            OverviewMetric(
+              '최근 28일 주문',
+              '${sales['order_count']}건',
+              '결제 완료 주문 기준',
+            ),
+          ];
+        } on StaffAuthException catch (e) {
+          warnings.add(e.message);
+          salesMetrics = [
+            for (final label in _hqLabels)
+              OverviewMetric(label, '—', '조회 실패 · 새로고침 필요'),
+          ];
+        }
+      }
+      return OverviewSnapshot(
+        [
+          ...?salesMetrics,
+          if (salesMetrics == null)
+            for (final label in _hqLabels)
+              OverviewMetric(label, '—', 'API 연결 예정'),
+          OverviewMetric('가용 재고 부족', '$count종', '제품 옵션 기준 · 기본 30% 미만'),
+        ],
+        [
+          if (count > 0)
+            OverviewAlert(
+              '가용 재고 부족',
+              '$count개 제품 옵션의 가용 재고가 재발주 기준 미만입니다.',
+              StaffView.inventory,
+            ),
+        ],
+        warnings: warnings,
+      );
+    }
+    return StaffOverviewVm(
+      orders: _orders,
+      work: _work,
+    ).fetch(roleKey: widget.roleKey, selectedBranchId: widget.selectedBranchId);
+  }
+
+  List<String> get _hqLabels => switch (widget.roleKey) {
+    'hqStaff' => ['발송 대기', '미답변 문의', '반품 검수 대기'],
+    'teamLeader' => ['1차 결재 대기', '승인 완료', '반려'],
+    'director' => ['최종 결재 대기', '승인 완료', '반려'],
+    _ => ['최근 28일 판매량', '최근 28일 매출', '최근 28일 주문'],
+  };
 
   Future<void> _refresh() async {
     final request = ++_requestNumber;
@@ -103,6 +182,11 @@ class _StaffOverviewState extends State<StaffOverview> {
                   '반품 요청',
                   '현재 보관 수량',
                 ])
+                  OverviewMetric(label, '—', _loading ? '조회 중' : '조회할 수 없음'),
+              ], const [])
+            : widget.dashboardApi != null
+            ? OverviewSnapshot([
+                for (final label in [..._hqLabels, '가용 재고 부족'])
                   OverviewMetric(label, '—', _loading ? '조회 중' : '조회할 수 없음'),
               ], const [])
             : null);

@@ -5,6 +5,20 @@ import 'auth_api.dart';
 class ManufacturerOrderApi {
   ManufacturerOrderApi(this.api);
   final AuthApi api;
+  Future<Map<String, dynamic>> recordReception(
+    int id, {
+    required String decision,
+    required String method,
+    required String comment,
+    required String requestId,
+  }) => _safe(() async {
+    return await api.post('/api/v1/manufacturer-orders/$id/reception', {
+      'decision': decision,
+      'confirmation_method': method,
+      'comment': comment.trim(),
+      'request_id': requestId,
+    });
+  });
   Future<T> _safe<T>(Future<T> Function() request) async {
     try {
       return await request();
