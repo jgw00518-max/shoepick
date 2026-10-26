@@ -46,3 +46,7 @@ abstract interface class SupportRepository {
   Future<Set<String>> getRestockKeys();
   Future<void> saveRestockKeys(Set<String> keys);
 }
+
+abstract interface class AccountSessionEvents {
+  Stream<void> get sessionEnded;
+}

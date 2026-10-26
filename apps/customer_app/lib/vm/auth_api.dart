@@ -16,6 +16,17 @@ class AuthApi {
 
   final FirebaseAuth auth;
   final String baseUrl;
+  Future<String?>? _refreshing;
+
+  Future<String?> _token(User user, bool refresh) async {
+    if (!refresh) return user.getIdToken();
+    final pending = _refreshing ??= user.getIdToken(true);
+    try {
+      return await pending;
+    } finally {
+      if (identical(_refreshing, pending)) _refreshing = null;
+    }
+  }
 
   Future<Map<String, dynamic>> get(String path) async {
     final response = await getResponse(path);
@@ -42,11 +53,17 @@ class AuthApi {
       ..connectionTimeout = const Duration(seconds: 10);
     try {
       for (var attempt = 0; attempt < 2; attempt++) {
-        final token = await user.getIdToken(attempt == 1);
+        final token = await _token(user, attempt == 1);
+        if (token == null ||
+            token.isEmpty ||
+            auth.currentUser?.uid != user.uid) {
+          throw StateError('로그인이 필요합니다.');
+        }
         final request = await client.openUrl(
           data == null ? 'GET' : 'POST',
           Uri.parse('${baseUrl.replaceFirst(RegExp(r"/$"), "")}$path'),
         );
+        request.followRedirects = false;
         request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
         if (data != null) {
           request.headers.contentType = ContentType.json;
@@ -55,15 +72,28 @@ class AuthApi {
         final response = await request.close().timeout(
           const Duration(seconds: 15),
         );
+        if (auth.currentUser?.uid != user.uid) {
+          throw StateError('로그인 상태가 변경되었습니다. 다시 요청해주세요.');
+        }
         if (response.statusCode == 401 && attempt == 0) {
           await response.drain<void>();
           continue;
         }
-        final body = jsonDecode(await utf8.decoder.bind(response).join());
         if (response.statusCode == 401) {
           await auth.signOut();
           throw StateError('로그인이 만료되었습니다. 다시 로그인해주세요.');
         }
+        if (response.statusCode == 403) {
+          await response.drain<void>();
+          throw StateError('접근 권한이 없습니다.');
+        }
+        final body = jsonDecode(
+          await utf8.decoder
+              .bind(response)
+              .join()
+              .timeout(const Duration(seconds: 15)),
+        );
+
         if (response.statusCode != 200 && response.statusCode != 201) {
           final code = body['error']?['code'];
           throw StateError(

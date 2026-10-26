@@ -34,9 +34,21 @@ class StoreController extends GetxController {
   String? loadError;
   bool isLoggedIn = false;
 
+  StreamSubscription<void>? _authSubscription;
+  @override
+  void onClose() {
+    _authSubscription?.cancel();
+    super.onClose();
+  }
+
   @override
   void onInit() {
     super.onInit();
+    if (accountRepository case final AccountSessionEvents events) {
+      _authSubscription = events.sessionEnded.listen((_) {
+        if (isLoggedIn) unawaited(_clearSession());
+      });
+    }
     load();
   }
 
@@ -174,6 +186,10 @@ class StoreController extends GetxController {
 
   Future<void> signOut() async {
     await accountRepository.signOut();
+    await _clearSession();
+  }
+
+  Future<void> _clearSession() async {
     isLoggedIn = false;
     // 이전 사용자의 개인 상태가 다음 로그인 화면에 남지 않도록 비운다.
     cart.clear();

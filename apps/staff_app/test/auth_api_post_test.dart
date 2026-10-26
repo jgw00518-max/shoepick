@@ -7,6 +7,8 @@ import 'package:shoepick_staff_app/vm/auth_api.dart';
 class TokenUser extends Fake implements User {
   final refreshes = <bool>[];
   @override
+  String get uid => 'test-user';
+  @override
   Future<String?> getIdToken([bool forceRefresh = false]) async {
     refreshes.add(forceRefresh);
     return forceRefresh ? 'refreshed' : 'original';

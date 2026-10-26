@@ -2,12 +2,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'auth_api.dart';
 import '../model/staff_session.dart';
 import 'staff_session.dart';
-import 'package:flutter/foundation.dart';
 
 /// Firebase 인증 후 서버가 확인한 직원·직책·소속만 기존 화면 모델에 전달한다.
-class FirebaseStaffAuth implements StaffAuthRepository {
+class FirebaseStaffAuth implements StaffAuthRepository, StaffSessionEvents {
   FirebaseStaffAuth({AuthApi? api}) : api = api ?? AuthApi();
   final AuthApi api;
+  @override
+  Stream<void> get sessionEnded =>
+      api.auth.authStateChanges().where((user) => user == null).map((_) {});
 
   Future<StaffProfile> _profile() async {
     final data = await api.get('/api/v1/authentication/staff');
@@ -15,6 +17,7 @@ class FirebaseStaffAuth implements StaffAuthRepository {
       'employeeId': data['employee_id'],
       'employeeCode': data['employee_code'],
       'employeeName': data['employee_name'],
+      'permissions': data['permissions'],
       'roles': [
         for (final role in data['roles'])
           {'roleCode': role['role_code'], 'roleName': role['role_name']},
@@ -49,10 +52,6 @@ class FirebaseStaffAuth implements StaffAuthRepository {
         email: email.trim(),
         password: password,
       );
-      if (kDebugMode) {
-        final token = await api.auth.currentUser?.getIdToken(true);
-        debugPrint('Firebase ID Token: $token');
-      }
       return await _profile();
     } on FirebaseAuthException catch (error) {
       await _clearSession();
