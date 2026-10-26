@@ -14,15 +14,15 @@ from pymysql.cursors import DictCursor
 
 if __package__ == "backend.features":
     from ..dependencies import get_db
-    from .authentication import current_customer
+    from .authentication import AuthRoute, current_customer
     from .inventory import reserve_order_inventory, release_order_inventory
 else:
     from dependencies import get_db
-    from features.authentication import current_customer
+    from features.authentication import AuthRoute, current_customer
     from features.inventory import reserve_order_inventory, release_order_inventory
 
 
-router = APIRouter(prefix="/orders", tags=["주문·결제"])
+router = APIRouter(prefix="/orders", tags=["주문·결제"], route_class=AuthRoute)
 
 
 def refund_return_order_mock(db: Connection, *, order_id: int, return_request_id: int,
@@ -629,15 +629,15 @@ def create_order(
     return OrderCreateResponse(data=result)
 
 
-@router.get("/paid", response_model=PaidOrderListResponse)
 def get_paid_orders(
     db: Connection = Depends(get_db),
+    *, customer_id: int | None = None,
 ) -> PaidOrderListResponse:
     """주문과 결제 기록이 모두 PAID인 주문을 조회한다."""
 
     with db.cursor(DictCursor) as cursor:
         cursor.execute(
-            """
+            f"""
             SELECT
                 o.order_id,
                 o.order_number,
@@ -655,7 +655,7 @@ def get_paid_orders(
             FROM orders AS o
             LEFT JOIN branches AS b
                 ON b.branch_id = o.pickup_branch_id
-            WHERE o.order_status = 'PAID'
+            WHERE {"o.customer_id = %s AND " if customer_id is not None else ""}o.order_status = 'PAID'
               AND EXISTS (
                   SELECT 1
                   FROM payments AS p
@@ -663,7 +663,8 @@ def get_paid_orders(
                     AND p.payment_status = 'PAID'
               )
             ORDER BY o.ordered_at DESC, o.order_id DESC
-            """
+            """,
+            (customer_id,) if customer_id is not None else (),
         )
         rows = cursor.fetchall()
 
@@ -672,10 +673,20 @@ def get_paid_orders(
     )
 
 
+@router.get("/paid", response_model=PaidOrderListResponse)
+def get_customer_paid_orders(
+    customer: dict = Depends(current_customer),
+    db: Connection = Depends(get_db),
+) -> PaidOrderListResponse:
+    """공개 API는 본인 주문만 조회하고 C의 내부 함수 호출 계약은 유지한다."""
+    return get_paid_orders(db=db, customer_id=customer['customer_id'])
+
+
 @router.get("/{order_id}", response_model=OrderDetailResponse)
 def get_order_detail(
     order_id: int = Path(gt=0),
     db: Connection = Depends(get_db),
+    customer: dict = Depends(current_customer),
 ) -> OrderDetailResponse:
     """주문 한 건의 상품 항목과 결제 기록을 조회한다."""
 
@@ -693,9 +704,9 @@ def get_order_detail(
             FROM orders AS o
             LEFT JOIN branches AS b
                 ON b.branch_id = o.pickup_branch_id
-            WHERE o.order_id = %s
+            WHERE o.order_id = %s AND o.customer_id = %s
             """,
-            (order_id,),
+            (order_id, customer["customer_id"]),
         )
         order = cursor.fetchone()
 

@@ -7,7 +7,11 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 import pymysql
-from .authentication import AuthError, current_customer, current_employee
+from .authentication import AuthError, current_customer, current_employee, require_permission
+if __package__ and __package__.startswith("backend."):
+    from ..auth_policy import DISPATCH_READ
+else:
+    from auth_policy import DISPATCH_READ
 from .order import get_paid_orders, mark_order_shipping, mark_order_ready_for_pickup, mark_order_received
 from .order import cancel_paid_order_mock, mark_order_canceled_mock
 from .inventory import release_order_inventory, consume_order_inventory, prepare_pickup_holdings, restore_return_inventory
@@ -68,7 +72,7 @@ def transition_pickup_order(db, *, order_id: int, fulfillment_id: int, pickup_id
         raise OrderReadError(error.status_code, error.detail['code'], error.detail['message']) from error
 
 
-def authorized_dispatch(employee=Depends(current_employee)) -> DispatchScope:
+def authorized_dispatch(employee=Depends(require_permission(DISPATCH_READ))) -> DispatchScope:
     roles = {role['role_code'] for role in employee['roles']}
     if 'HQ_STAFF' in roles:
         return DispatchScope((), ('PAID',), all_branches=True)

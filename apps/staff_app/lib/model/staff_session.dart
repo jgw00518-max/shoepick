@@ -39,6 +39,7 @@ class StaffProfile {
     required this.name,
     required this.roles,
     required this.branches,
+    this.permissions = const [],
   });
 
   final int id;
@@ -46,8 +47,12 @@ class StaffProfile {
   final String name;
   final List<StaffRoleAssignment> roles;
   final List<StaffBranch> branches;
+  final List<String> permissions;
+  bool hasPermission(String code) => permissions.contains(code);
 
   factory StaffProfile.fromJson(Map<String, dynamic> json) => StaffProfile(
+    permissions: (json['permissions'] as List<dynamic>? ?? const [])
+        .cast<String>(),
     id: json['employeeId'] as int,
     code: json['employeeCode'] as String,
     name: json['employeeName'] as String,

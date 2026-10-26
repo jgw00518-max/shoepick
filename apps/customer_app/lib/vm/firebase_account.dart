@@ -4,11 +4,16 @@ import '../domain/repositories.dart';
 import 'auth_api.dart';
 
 /// 기존 계정 인터페이스를 유지하면서 Firebase 로그인과 서버 회원 확인을 연결한다.
-class FirebaseAccount implements AccountRepository {
+class FirebaseAccount implements AccountRepository, AccountSessionEvents {
   FirebaseAccount({AuthApi? api}) : api = api ?? AuthApi();
 
   final AuthApi api;
   int? customerId;
+  @override
+  Stream<void> get sessionEnded =>
+      api.auth.authStateChanges().where((user) => user == null).map((_) {
+        customerId = null;
+      });
 
   @override
   Future<bool> signIn(String email, String password) async {

@@ -20,7 +20,13 @@ if __package__ == "backend.features":
 else:
     from dependencies import get_db
 
-router = APIRouter(prefix="/inventory", tags=["재고"])
+from .authentication import AuthRoute, require_permission, check_branch
+if __package__ == "backend.features":
+    from ..auth_policy import HQ_INVENTORY_READ, BRANCH_INVENTORY_READ
+else:
+    from auth_policy import HQ_INVENTORY_READ, BRANCH_INVENTORY_READ
+
+router = APIRouter(prefix="/inventory", tags=["재고"], route_class=AuthRoute)
 
 # 1. 요청·응답 모델
 class HeadquartersInventoryItem(BaseModel):
@@ -163,6 +169,7 @@ def list_headquarters_inventory(
 @router.get("/headquarters", response_model=HeadquartersInventoryResponse)
 def get_headquarters_inventory(
     db: Annotated[Connection, Depends(get_db)],
+    employee: Annotated[dict, Depends(require_permission(HQ_INVENTORY_READ))],
     page: Annotated[int, Query(ge=1, description="페이지 번호")] = 1,
     page_size: Annotated[int, Query(ge=1, le=100, description="페이지당 항목 수")] = 20,
     keyword: Annotated[str | None, Query(max_length=150, description="상품명 또는 상품 코드")] = None,
@@ -170,7 +177,7 @@ def get_headquarters_inventory(
     sort: SortField = "updated_at",
     order: Literal["asc", "desc"] = "desc",
 ) -> HeadquartersInventoryResponse:
-    """본사 재고 목록을 조회한다. 직원 인증은 담당 B의 공통 기능 연결 시 추가한다."""
+    """DB 본사 재고 조회 권한이 있는 활성 직원만 조회한다."""
     return list_headquarters_inventory(
         db,
         page=page,
@@ -258,6 +265,7 @@ def list_branch_inventory(
 def get_branch_inventory(
     branch_id: Annotated[int, Path(gt=0, description="대리점 ID")],
     db: Annotated[Connection, Depends(get_db)],
+    employee: Annotated[dict, Depends(require_permission(BRANCH_INVENTORY_READ))],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
     keyword: Annotated[str | None, Query(max_length=150, description="상품명 또는 상품 코드")] = None,
@@ -266,7 +274,8 @@ def get_branch_inventory(
     sort: BranchSortField = "updated_at",
     order: Literal["asc", "desc"] = "desc",
 ) -> BranchInventoryResponse:
-    """대리점 보관 현황 조회. 직원의 소속 지점 검증은 담당 B 연동 시 추가한다."""
+    """대리점 조회 권한과 실제 소속을 모두 확인한다."""
+    check_branch(employee, branch_id)
     return list_branch_inventory(
         db, branch_id=branch_id, page=page, page_size=page_size,
         keyword=keyword, product_variant_id=product_variant_id,

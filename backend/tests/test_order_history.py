@@ -132,6 +132,7 @@ def test_staff_real_scope_adapter(client, role):
     from backend.features.authentication import current_employee
     app.dependency_overrides[current_employee] = lambda: {
         'roles': [{'role_code': role}], 'branches': [{'branch_id': 3}],
+        'permissions': ['orders.dispatch.read'],
     }
     response = client[0].get('/api/v1/order-history/staff/dispatch?branch_id=4')
     assert response.status_code == (200 if role == 'HQ_STAFF' else 403)
@@ -143,6 +144,7 @@ def test_allowed_staff_own_branch_returns_empty(client, role):
     from backend.features.authentication import current_employee
     app.dependency_overrides[current_employee] = lambda: {
         'roles': [{'role_code': role}], 'branches': [{'branch_id': 3}],
+        'permissions': ['orders.dispatch.read'],
     }
     response = client[0].get('/api/v1/order-history/staff/dispatch?branch_id=3')
     assert response.status_code == 200

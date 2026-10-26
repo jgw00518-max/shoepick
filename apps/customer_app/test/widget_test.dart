@@ -3,8 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:shupick/app/shupick_app.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shupick/data/mock_repositories.dart';
+import 'package:shupick/domain/repositories.dart';
 
 void main() {
+  setUp(() {
+    // 화면 회귀 테스트는 실제 상품 API 연결에 의존하지 않는다.
+    Get.put<ProductRepository>(MockProductRepository());
+  });
   tearDown(Get.reset);
 
   testWidgets('비회원 홈에서 상품과 마이페이지로 이동할 수 있다', (tester) async {

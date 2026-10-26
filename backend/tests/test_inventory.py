@@ -8,6 +8,7 @@ from pymysql import OperationalError
 
 from backend.features.inventory import get_db
 from backend.main import app
+from backend.features.authentication import current_employee
 
 
 class FakeCursor:
@@ -45,6 +46,11 @@ def client():
 
     connection = FakeConnection()
     app.dependency_overrides[get_db] = lambda: connection
+    app.dependency_overrides[current_employee] = lambda: {
+        'employee_id': 1,
+        'permissions': ['inventory.headquarters.read', 'inventory.branches.read'],
+        'branches': [{'branch_id': value} for value in (1, 3, 999999)],
+    }
     try:
         with TestClient(app) as test_client:
             yield test_client, connection

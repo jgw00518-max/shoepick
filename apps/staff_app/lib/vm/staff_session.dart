@@ -60,3 +60,7 @@ class MockStaffAuthRepository implements StaffAuthRepository {
     );
   }
 }
+
+abstract interface class StaffSessionEvents {
+  Stream<void> get sessionEnded;
+}

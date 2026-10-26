@@ -1,3 +1,4 @@
+import 'firebase_http_client.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -7,7 +8,7 @@ import 'package:shoepick_staff_app/model/staff_session.dart';
 
 class HeadquartersInventoryApi {
   HeadquartersInventoryApi({http.Client? client, String? baseUrl})
-    : _client = client ?? http.Client(),
+    : _client = client ?? FirebaseHttpClient(),
       _ownsClient = client == null,
       _baseUrl =
           baseUrl ??

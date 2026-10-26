@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../vm/firebase_staff_auth.dart';
 import '../vm/purchase_requisition_api.dart';
@@ -18,6 +19,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   late final StaffAuthRepository authRepository;
+  StreamSubscription<void>? _authSubscription;
   StaffProfile? profile;
   int? selectedBranchId;
   bool loading = true;
@@ -28,7 +30,22 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     authRepository = widget.authRepository ?? MockStaffAuthRepository();
+    if (authRepository case final StaffSessionEvents events) {
+      _authSubscription = events.sessionEnded.listen((_) {
+        if (!mounted) return;
+        setState(() {
+          profile = null;
+          selectedBranchId = null;
+        });
+      });
+    }
     _restoreSession();
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   List<StaffRole> _rolesFor(StaffProfile staff) => [
